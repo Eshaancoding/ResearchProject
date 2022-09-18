@@ -1,4 +1,3 @@
-from argparse import ArgumentError
 from copy import deepcopy
 import torch
 from torch import nn
@@ -6,7 +5,6 @@ from torch import Tensor
 import math
 
 class PositionalEncoding(nn.Module):
-
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -27,7 +25,6 @@ class PositionalEncoding(nn.Module):
 
 class VNN (nn.Module):
     def __init__(self, dense_nn, weight_nn, bias_nn) -> None:
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         super().__init__()
         self.d_model = (weight_nn[0].in_features-1)//2
         self.first_input = dense_nn[0].in_features
@@ -35,14 +32,11 @@ class VNN (nn.Module):
         self.dense_nn = dense_nn
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
-        self.pos_enc = PositionalEncoding(self.d_model, dropout=0.1, max_len=5000).to(self.device)
-
-        self.to(self.device)
+        self.pos_enc = PositionalEncoding(self.d_model, dropout=0.1, max_len=5000)
 
     def generate_weight_vector (self, x, output_size):
         input_size = x.size(1)
         seq_len = x.size(0)
-        x = x.to(self.device)
         #* Weight Generation
 
         # Generate the weight vector
@@ -53,12 +47,11 @@ class VNN (nn.Module):
         argument_one = argument_one.repeat(seq_len, output_size)
         argument_two = argument_two.repeat(seq_len, input_size)
 
-        x_concat = deepcopy(x).to(self.device)
-        x_concat = x_concat.repeat(1, output_size).unsqueeze(2)
+        x_concat = x.repeat(1, output_size).unsqueeze(2).to(x.device)
 
         # Positional Encoding + Concat
-        argument_one = self.pos_enc(argument_one).to(self.device)
-        argument_two = self.pos_enc(argument_two).to(self.device)
+        argument_one = self.pos_enc(argument_one)
+        argument_two = self.pos_enc(argument_two)
         argument = torch.concat((argument_one, argument_two, x_concat), dim=2)
         weights = self.weight_nn(argument).view(seq_len, input_size, output_size)
         x = x.view(seq_len, 1, input_size)
@@ -68,9 +61,9 @@ class VNN (nn.Module):
 
         # Create Bias Argument
         argument_one = torch.arange(output_size)
-        argument_one = self.pos_enc(argument_one).squeeze(1).to(self.device)
+        argument_one = self.pos_enc(argument_one).squeeze(1)
         argument_one = argument_one.repeat(seq_len, 1, 1)
-        argument_two = out.unsqueeze(2)
+        argument_two = out.unsqueeze(2).detach()
         bias_argument = torch.concat((argument_one, argument_two), dim=2)
 
         # Add bias
@@ -102,6 +95,7 @@ dense_model = nn.Sequential(
     nn.Tanh(),
     nn.Linear(64,  10),
 )
-vnn = VNN(dense_model, weight_model, bias_model)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+vnn = VNN(dense_model, weight_model, bias_model).to(device)
 
-print(vnn(torch.randn(5,38)).to("cuda" if torch.cuda.is_available() else "cpu").shape)
+print(vnn(torch.randn(1,1568).to(device)).shape)
