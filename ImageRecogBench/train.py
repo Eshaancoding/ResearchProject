@@ -38,7 +38,7 @@ class MNISTDatasetSize (Dataset):
 
         if self.mag == 2:
             transform = transforms.Compose([
-                transforms.Resize((30, 30)),
+                transforms.Resize((35, 35)),
                 transforms.ToTensor(),
             ])
         elif self.mag == 3:
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     validation_size = 64
     num_samples_per_itr = 4
     lr = 0.001
-    itr = 1_000
+    itr = 5_000
     test_mag = 1
 
     criterion = nn.CrossEntropyLoss()
