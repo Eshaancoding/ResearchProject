@@ -59,8 +59,8 @@ for epoch in range(epochs):
     
     # Test
     with torch.no_grad():
-        x = torch.rand(1,15).to(torch.float)
-        out = model(x, 15)
+        x = torch.rand(1,5).to(torch.float)
+        out = model(x, 5)
         exp_out = torch.argmax(x, dim=1)
 
         loss = criterion(out, exp_out)
