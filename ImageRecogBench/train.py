@@ -22,8 +22,12 @@ class MNISTDatasetSize (Dataset):
         self.mag = mag
         self.size = size
 
-        left = len(mnist_test_dataset) - size
-        self.dataset, _ = random_split(mnist_test_dataset, (size, left))
+        if use_test:
+            left = len(mnist_test_dataset) - size
+            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
+        else:
+            left = len(mnist_dataset) - size
+            self.dataset, _ = random_split(mnist_dataset, (size, left))
 
     def __len__ (self):
         return self.size
