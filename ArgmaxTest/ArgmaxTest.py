@@ -1,3 +1,4 @@
+import sys; sys.path.append("..\\")
 from tkinter import W
 from torch import nn
 from VNN import *
@@ -12,7 +13,6 @@ def print_var (var, name=""):
     print(var)
     print("".join(["-" for _ in range(len(str))]))
     print()
-
 
 control = False
 

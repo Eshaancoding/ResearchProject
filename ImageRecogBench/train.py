@@ -170,4 +170,4 @@ if __name__ == "__main__":
         i+=1
 
     # Save Model
-    torch.save(policy, "..\models\MNISTBenchmarkModel.pt")
+    torch.save(policy, "..\models\ImageRecogModel.pt")
