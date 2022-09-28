@@ -70,7 +70,7 @@ class AutoEncodingModel (nn.Module):
 
 # Initialize hyperparameters 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-itr = 100_000
+itr = 10_000
 batch_size = 32
 low_bound_arr_size = 256
 high_bound_arr_size = 512
