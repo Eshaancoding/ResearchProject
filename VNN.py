@@ -48,7 +48,9 @@ class VNNBlock (nn.Module):
         # Positional Encoding + Concat
         argument_one = self.pos_enc(argument_one)
         argument_two = self.pos_enc(argument_two)
+
         argument = torch.concat((argument_one, argument_two, x_concat), dim=2)
+        
         weights = self.weight_nn(argument.detach()).view(seq_len, input_size, output_size)
         x = x.view(seq_len, 1, input_size)
         out = torch.bmm(x, weights).squeeze(1)

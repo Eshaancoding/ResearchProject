@@ -1,8 +1,59 @@
-import sys; sys.path.append("..\\")
+import sys
+from this import s; sys.path.append("..\\")
 from VNN import *
 from torch import nn
 from tqdm import trange
 from random import randint
+from torchvision.datasets import MNIST
+from torch.utils.data import random_split, DataLoader, Dataset
+import torchvision.transforms as transforms
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+s
+
+# Dataset
+mnist_dataset = MNIST(root="./datasets/", download=True)
+mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
+class MNISTDatasetSize (Dataset):
+    def __init__(self, size=512, mag=1, use_test=False) -> None:
+        super().__init__()
+
+        self.mag = mag
+        self.size = size
+
+        if use_test:
+            left = len(mnist_test_dataset) - size
+            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
+        else:
+            left = len(mnist_dataset) - size
+            self.dataset, _ = random_split(mnist_dataset, (size, left))
+
+    def __len__ (self):
+        return self.size
+
+    def __getitem__(self, index):
+        x, y = self.dataset[index]
+        
+        # Use transformations
+        transform = transforms.Compose([
+            transforms.PILToTensor(),
+        ]) 
+
+        if self.mag == 2:
+            transform = transforms.Compose([
+                transforms.Resize((35, 35)),
+                transforms.ToTensor(),
+            ])
+        elif self.mag == 3:
+            transform = transforms.Compose([
+                transforms.Resize((45, 45)),
+                transforms.ToTensor(),
+            ])
+
+        x = transform(x).to(torch.float).to(device)
+        y = torch.tensor(y).to(torch.long).to(device)
+        return x, y
 
 # Model
 class AutoEncodingModel (nn.Module):
