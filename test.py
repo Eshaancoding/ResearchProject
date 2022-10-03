@@ -16,4 +16,4 @@ bias_model = nn.Sequential(
 vnn_block = VNNBlock(weight_model, bias_model)
 
 input = torch.rand(1, 5)
-print(vnn_block(input, 2))
+print(vnn_block(input, 5, 2))
