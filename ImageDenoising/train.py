@@ -1,5 +1,5 @@
 import sys
-from this import s; sys.path.append("..\\")
+sys.path.append("..\\")
 from VNN import *
 from torch import nn
 from tqdm import trange
@@ -10,17 +10,27 @@ import torchvision.transforms as transforms
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-s
-
 # Dataset
 mnist_dataset = MNIST(root="./datasets/", download=True)
 mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
+
+class AddGaussianNoise(object):
+    def __init__(self, std=1.):
+        self.std = std
+        
+    def __call__(self, tensor):
+        return torch.clip(tensor + torch.randn(tensor.size()) * self.std, 0, 1)
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(0, self.std)
+
 class MNISTDatasetSize (Dataset):
-    def __init__(self, size=512, mag=1, use_test=False) -> None:
+    def __init__(self, size=512, mag=1, std_noise=0.7, use_test=False) -> None:
         super().__init__()
 
         self.mag = mag
         self.size = size
+        self.std_noise = std_noise
 
         if use_test:
             left = len(mnist_test_dataset) - size
@@ -33,26 +43,40 @@ class MNISTDatasetSize (Dataset):
         return self.size
 
     def __getitem__(self, index):
-        x, y = self.dataset[index]
+        image, _ = self.dataset[index]
         
         # Use transformations
-        transform = transforms.Compose([
+        transformY = transforms.Compose([
             transforms.PILToTensor(),
+        ]) 
+        transformX = transforms.Compose([
+            transforms.PILToTensor(),
+            AddGaussianNoise(self.std_noise)
         ]) 
 
         if self.mag == 2:
-            transform = transforms.Compose([
+            transformY = transforms.Compose([
                 transforms.Resize((35, 35)),
                 transforms.ToTensor(),
             ])
+            transformX = transforms.Compose([
+                transforms.Resize((35, 35)),
+                transforms.ToTensor(),
+                AddGaussianNoise(self.std_noise)
+            ])
         elif self.mag == 3:
-            transform = transforms.Compose([
+            transformY = transforms.Compose([
                 transforms.Resize((45, 45)),
                 transforms.ToTensor(),
             ])
+            transformX = transforms.Compose([
+                transforms.Resize((45, 45)),
+                transforms.ToTensor(),
+                AddGaussianNoise(self.std_noise)
+            ])
 
-        x = transform(x).to(torch.float).to(device)
-        y = torch.tensor(y).to(torch.long).to(device)
+        x = transformX(image).to(torch.float).to(device)
+        y = transformY(image).to(torch.float).to(device)
         return x, y
 
 # Model
@@ -61,8 +85,8 @@ class AutoEncodingModel (nn.Module):
         super().__init__()
         d_model = 16
         self.encoding_size = 64
-        self.input_size = 256
 
+        #* Input Block
         weight_model = nn.Sequential(
             nn.Linear(d_model*2+1, 16),
             nn.Tanh(),
@@ -75,6 +99,7 @@ class AutoEncodingModel (nn.Module):
         )
         self.input_block = VNNBlock(weight_model, bias_model)
 
+        #* Output Block
         output_weight_model = nn.Sequential(
             nn.Linear(d_model*2+1, 16),
             nn.Tanh(),
@@ -87,45 +112,68 @@ class AutoEncodingModel (nn.Module):
         )
         self.output_block = VNNBlock(output_weight_model, output_bias_model)
 
+        #* Encoder & Decoder
         self.encoder = nn.Sequential(
-            nn.Linear(self.input_size, 128),
-            nn.Sigmoid(),
-            nn.Linear(128, self.encoding_size),
-            nn.Sigmoid(),
+            nn.Conv2d(
+                in_channels=1,              
+                out_channels=16,            
+                kernel_size=3,              
+                stride=3,                   
+                padding=2,                  
+            ),                              
+            nn.ReLU(),                      
+            nn.Conv2d(
+                in_channels=16,              
+                out_channels=8,            
+                kernel_size=3,              
+                stride=3,                   
+                padding=2,                  
+            ),                              
+            nn.ReLU(),  
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(self.encoding_size, 128),
-            nn.Sigmoid(),
-            nn.Linear(128, self.input_size),
-            nn.Sigmoid(),
+            nn.ConvTranspose2d(
+                in_channels=8,              
+                out_channels=16,            
+                kernel_size=3,              
+                stride=3,                   
+                padding=2,                  
+            ),                              
+            nn.ReLU(),                      
+            nn.ConvTranspose2d(
+                in_channels=16,              
+                out_channels=1,            
+                kernel_size=3,              
+                stride=3,                   
+                padding=2,                  
+            ),                              
+            nn.ReLU(),
         )
 
-    def forward (self, x):
-        len_seq = x.size(1)
-        x = self.input_block(x, self.input_size)
-        x = self.encoder(x)
-        x = self.decoder(x)
-        x = self.output_block(x, len_seq)
-        return x
-
     def encode (self, x):
-        x = self.input_block(x, self.input_size)
         x = self.encoder(x)
         return x 
 
-    def decode (self, x, len_size):
+    def decode (self, x, orig_size):
         x = self.decoder(x)
-        x = self.output_block(x, len_size)
-        return x
+        x = torch.flatten(x, start_dim=1)
+        x = self.output_block(x, orig_size)
+        return torch.sigmoid(x)
+
+    def forward (self, x):
+        orig_size = x
+        x = self.encode(x)
+        x = self.decode(x, orig_size.size(2) * orig_size.size(3))
+        return x.view(orig_size) 
 
 # Initialize hyperparameters 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 itr = 10_000
-batch_size = 32
-low_bound_arr_size = 256
-high_bound_arr_size = 512
+batch_size = 16
+size_per_itr = 128
 lr = 0.01
+epochs = 3
 
 # Declare model and optimizer
 model = AutoEncodingModel().to(device) 
@@ -134,17 +182,18 @@ opt = torch.optim.Adam(model.parameters(), lr=lr)
 
 # Training loop
 progress_bar = trange(itr)
-for _ in progress_bar:
-    # get batch data
-    len_seq = randint(low_bound_arr_size, high_bound_arr_size)
-    x = torch.rand(batch_size, len_seq).to(device)
-    
-    # Train
-    opt.zero_grad()
-    out = model(x)
-    loss = criterion(out, x)
-    loss.backward()
-    opt.step()
+for i in progress_bar:
+    mag = randint(1,3)
+    mag = 3
+    dataset = MNISTDatasetSize(size_per_itr, mag=mag, std_noise=0.7) 
+    dataset = DataLoader(dataset, batch_size=batch_size)
+    for x, y in dataset: 
+        # Train
+        opt.zero_grad()
+        out = model(x)
+        loss = criterion(out, y)
+        loss.backward()
+        opt.step()
 
-    # set progress bar
-    progress_bar.set_description(f"Loss: {loss.item():.3f}")
+        # set progress bar
+        progress_bar.set_description(f"Loss: {loss.item():.3f}")
