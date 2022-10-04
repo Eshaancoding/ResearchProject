@@ -30,7 +30,7 @@ class VNNBlock (nn.Module):
         self.bias_nn = bias_nn 
         self.pos_enc = PositionalEncoding(d_model,max_len=5000)
 
-    def forward (self, x, output_size):
+    def weight_propagation (self, x, output_size):
         input_size = x.size(1)
         seq_len = x.size(0)
 
@@ -68,4 +68,20 @@ class VNNBlock (nn.Module):
         bias = self.bias_nn(bias_argument.detach()).squeeze(2)
         out += bias
 
+        return out
+
+    def forward (self, x, output_size, chunks=1):
+        arr = [output_size // chunks for _ in range(chunks)]        
+        if output_size % chunks > 0: 
+            arr.append(output_size % chunks) 
+
+        out = torch.tensor([])
+        output_size = 5
+
+        for i in range(len(arr)):
+            output = self.weight_propagation(x, arr[i])
+            if out.size(0) == 0: 
+                out = output 
+            else:
+                out = torch.concat((out, output), dim=1)
         return out
