@@ -1,4 +1,5 @@
 from VNN import * 
+import time
 
 d_model = 16
 weight_model = nn.Sequential(
@@ -15,5 +16,8 @@ bias_model = nn.Sequential(
 
 vnn_block = VNNBlock(weight_model, bias_model)
 
-input = torch.rand(1, 5)
-print(vnn_block(input, 5, 2))
+input = torch.rand(5, 5)
+start = time.time()
+print(vnn_block(input, output_size=10, chunks=1))
+end = time.time()
+print(end-start)
