@@ -7,20 +7,16 @@ import math
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 5000):
         super().__init__()
-
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+        self.d_model = d_model
 
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        return self.pe[x].squeeze(2)
+
+        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-math.log(10000.0) / self.d_model))
+        pe = torch.zeros(1, 1, self.d_model)
+        print(x.shape)
+        pe[:, 0, 0::2] = torch.sin(x * div_term)
+        pe[:, 0, 1::2] = torch.cos(x * div_term)
+        return pe
 
 class VNNBlock (nn.Module):
     def __init__(self, weight_nn, bias_nn) -> None:
@@ -46,8 +42,8 @@ class VNNBlock (nn.Module):
         x_concat = x.repeat(1, output_size).unsqueeze(2).to(x.device)
 
         # Positional Encoding + Concat
-        argument_one = self.pos_enc(argument_one)
-        argument_two = self.pos_enc(argument_two)
+        argument_one = self.pos_enc(argument_one.detach())
+        argument_two = self.pos_enc(argument_two.detach())
 
         argument = torch.concat((argument_one, argument_two, x_concat), dim=2)
         
@@ -59,7 +55,7 @@ class VNNBlock (nn.Module):
 
         # Create Bias Argument
         argument_one = torch.arange(output_size)
-        argument_one = self.pos_enc(argument_one).squeeze(1)
+        argument_one = self.pos_enc(argument_one.detach()).squeeze(1)
         argument_one = argument_one.repeat(seq_len, 1, 1)
         argument_two = out.unsqueeze(2)
         bias_argument = torch.concat((argument_one, argument_two), dim=2)
@@ -70,7 +66,19 @@ class VNNBlock (nn.Module):
 
         return out
 
+    def return_gpu_desc (self):
+        t = torch.cuda.get_device_properties(0).total_memory
+        r = torch.cuda.memory_reserved(0)
+        a = torch.cuda.memory_allocated(0)
+        f = r-a  # free inside reserved
+        return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
+
     def forward (self, x, output_size, chunks=1):
+        if chunks == "all":
+            chunks = output_size
+        elif chunks == "none":
+            chunks = 0
+
         arr = [output_size // chunks for _ in range(chunks)]        
         if output_size % chunks > 0: 
             arr.append(output_size % chunks) 

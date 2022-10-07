@@ -10,6 +10,13 @@ import torchvision.transforms as transforms
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+# Helper functions
+def return_gpu_desc ():
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    f = r-a  # free inside reserved
+    return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
 # Dataset
 mnist_dataset = MNIST(root="./datasets/", download=True)
 mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
@@ -86,19 +93,6 @@ class AutoEncodingModel (nn.Module):
         d_model = 16
         self.encoding_size = 64
 
-        #* Input Block
-        weight_model = nn.Sequential(
-            nn.Linear(d_model*2+1, 16),
-            nn.Tanh(),
-            nn.Linear(16, 1),
-        ) 
-        bias_model = nn.Sequential(
-            nn.Linear(d_model+1, 12),
-            nn.Tanh(),
-            nn.Linear(12, 1),
-        )
-        self.input_block = VNNBlock(weight_model, bias_model)
-
         #* Output Block
         output_weight_model = nn.Sequential(
             nn.Linear(d_model*2+1, 16),
@@ -158,20 +152,20 @@ class AutoEncodingModel (nn.Module):
     def decode (self, x, orig_size):
         x = self.decoder(x)
         x = torch.flatten(x, start_dim=1)
-        x = self.output_block(x, orig_size)
+        x = self.output_block(x, orig_size, chunks=6)
         return torch.sigmoid(x)
 
     def forward (self, x):
-        orig_size = x
+        orig_size = x.shape
         x = self.encode(x)
-        x = self.decode(x, orig_size.size(2) * orig_size.size(3))
+        x = self.decode(x, orig_size[2] * orig_size[3])
         return x.view(orig_size) 
 
 # Initialize hyperparameters 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 itr = 10_000
 batch_size = 16
-size_per_itr = 128
+size_per_itr = 16
 lr = 0.01
 epochs = 3
 
