@@ -22,16 +22,15 @@ class PosEncIndex(nn.Module):
         return pe[x]
 
 class VNNBlock (nn.Module):
-    def __init__(self, weight_nn, bias_nn) -> None:
+    def __init__(self, weight_nn, bias_nn, d_model) -> None:
         super().__init__()
-        d_model = (weight_nn[0].in_features-1)//2
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
         self.pos_enc = PosEncIndex(d_model)
 
-    def weight_propagation (self, x, output_size):
+    def weight_propagation (self, x, output_size, extra_out):
         input_size = x.size(1)
-        seq_len = x.size(0)
+        batch_size = x.size(0)
 
         #* Weight Generation
         # Generate the weight vector
@@ -39,8 +38,8 @@ class VNNBlock (nn.Module):
         argument_two = torch.arange(output_size)
 
         # Generate the repeat
-        argument_one = argument_one.repeat(seq_len, output_size)
-        argument_two = argument_two.repeat(seq_len, input_size)
+        argument_one = argument_one.repeat(batch_size, output_size)
+        argument_two = argument_two.repeat(batch_size, input_size)
 
         x_concat = x.repeat(1, output_size).unsqueeze(2).to(x.device)
 
@@ -48,10 +47,13 @@ class VNNBlock (nn.Module):
         argument_one = self.pos_enc(argument_one.detach())
         argument_two = self.pos_enc(argument_two.detach())
 
-        argument = torch.concat((argument_one, argument_two, x_concat), dim=2)
+        if extra_out != None:  
+            argument = torch.concat((argument_one, argument_two, x_concat, extra_out.repeat(1, input_size, 1)), dim=2)
+        else:
+            argument = torch.concat((argument_one, argument_two, x_concat), dim=2)
         
-        weights = self.weight_nn(argument.detach()).view(seq_len, input_size, output_size)
-        x = x.view(seq_len, 1, input_size)
+        weights = self.weight_nn(argument.detach()).view(batch_size, input_size, output_size)
+        x = x.view(batch_size, 1, input_size)
         out = torch.bmm(x, weights).squeeze(1)
 
         #* Bias Generation
@@ -59,9 +61,12 @@ class VNNBlock (nn.Module):
         # Create Bias Argument
         argument_one = torch.arange(output_size)
         argument_one = self.pos_enc(argument_one.detach()).squeeze(1)
-        argument_one = argument_one.repeat(seq_len, 1, 1)
+        argument_one = argument_one.repeat(batch_size, 1, 1)
         argument_two = out.unsqueeze(2)
-        bias_argument = torch.concat((argument_one, argument_two), dim=2)
+        if extra_out != None:
+            bias_argument = torch.concat((argument_one, argument_two, extra_out), dim=2)
+        else:
+            bias_argument = torch.concat((argument_one, argument_two), dim=2)
 
         # Add bias
         bias = self.bias_nn(bias_argument.detach()).squeeze(2)
@@ -76,11 +81,13 @@ class VNNBlock (nn.Module):
         f = r-a  # free inside reserved
         return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
 
-    def forward (self, x, output_size, chunks=1):
-        if chunks == "all":
-            chunks = output_size
-        elif chunks == "none":
-            chunks = 0
+    def forward (self, x, output_size, extra_out=None, chunks=1):
+        # Extra Out size: 
+        # first dim is the batch size, second dim is the output space, third dim is the vector added during weight 
+        assert x.size(0) == extra_out.size(0), f"Batch size of x ({x.size(0)}) is the same as the batch size of extra_out ({extra_out.size(0)})"
+
+        if chunks == "all": chunks = output_size
+        elif chunks == "none": chunks = 0
 
         arr = [output_size // chunks for _ in range(chunks)]        
         if output_size % chunks > 0: 
@@ -90,7 +97,7 @@ class VNNBlock (nn.Module):
         output_size = 5
 
         for i in range(len(arr)):
-            output = self.weight_propagation(x, arr[i])
+            output = self.weight_propagation(x, arr[i], extra_out)
             if out.size(0) == 0: 
                 out = output 
             else:
