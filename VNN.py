@@ -4,19 +4,22 @@ from torch import nn
 from torch import Tensor
 import math
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 5000):
+class PosEncIndex(nn.Module):
+    def __init__(self, d_model: int):
         super().__init__()
         self.d_model = d_model
 
     def forward(self, x: Tensor) -> Tensor:
+        length = torch.max(x).item()+1
+        
+        pe = torch.zeros(length, self.d_model)
+        position = torch.arange(0, length).unsqueeze(1)
+        div_term = torch.exp((torch.arange(0, self.d_model, 2, dtype=torch.float) *
+                            -(math.log(10000.0) / self.d_model)))
+        pe[:, 0::2] = torch.sin(position.float() * div_term)
+        pe[:, 1::2] = torch.cos(position.float() * div_term)
 
-        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-math.log(10000.0) / self.d_model))
-        pe = torch.zeros(1, 1, self.d_model)
-        print(x.shape)
-        pe[:, 0, 0::2] = torch.sin(x * div_term)
-        pe[:, 0, 1::2] = torch.cos(x * div_term)
-        return pe
+        return pe[x]
 
 class VNNBlock (nn.Module):
     def __init__(self, weight_nn, bias_nn) -> None:
@@ -24,7 +27,7 @@ class VNNBlock (nn.Module):
         d_model = (weight_nn[0].in_features-1)//2
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
-        self.pos_enc = PositionalEncoding(d_model,max_len=5000)
+        self.pos_enc = PosEncIndex(d_model)
 
     def weight_propagation (self, x, output_size):
         input_size = x.size(1)

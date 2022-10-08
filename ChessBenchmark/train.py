@@ -63,22 +63,22 @@ def decode_move (x:torch.tensor):
 def encode_board (board):
     x = 0
     y = 0
-    return_tensor = torch.zeros(1,8,8,13)
+    return_tensor = torch.zeros(1,13,8,8)
     for char in board.__str__():
         if char == " ": continue
-        if char == "r":   return_tensor[0][x][y][0] = 1
-        elif char == "n": return_tensor[0][x][y][1] = 1
-        elif char == "b": return_tensor[0][x][y][2] = 1
-        elif char == "q": return_tensor[0][x][y][3] = 1
-        elif char == "k": return_tensor[0][x][y][4] = 1
-        elif char == "k": return_tensor[0][x][y][5] = 1
-        elif char == "P": return_tensor[0][x][y][6] = 1
-        elif char == "R": return_tensor[0][x][y][7] = 1
-        elif char == "N": return_tensor[0][x][y][8] = 1
-        elif char == "B": return_tensor[0][x][y][9] = 1
-        elif char == "Q": return_tensor[0][x][y][10] = 1
-        elif char == "K": return_tensor[0][x][y][11] = 1
-        if char == "p":   return_tensor[0][x][y][12] = 1
+        if char == "r":   return_tensor[0][0][x][y] = 1
+        elif char == "n": return_tensor[0][1][x][y] = 1
+        elif char == "b": return_tensor[0][2][x][y] = 1
+        elif char == "q": return_tensor[0][3][x][y] = 1
+        elif char == "k": return_tensor[0][4][x][y] = 1
+        elif char == "k": return_tensor[0][5][x][y] = 1
+        elif char == "P": return_tensor[0][6][x][y] = 1
+        elif char == "R": return_tensor[0][7][x][y] = 1
+        elif char == "N": return_tensor[0][8][x][y] = 1
+        elif char == "B": return_tensor[0][9][x][y] = 1
+        elif char == "Q": return_tensor[0][10][x][y] = 1
+        elif char == "K": return_tensor[0][11][x][y] = 1
+        if char == "p":   return_tensor[0][12][x][y] = 1
 
         x += 1
         if char == "\n": 
@@ -86,7 +86,7 @@ def encode_board (board):
             x = 0
     return return_tensor
 
-class Dataset(torch.utils.data.Dataset):
+class ChessClassificationDatabase(torch.utils.data.Dataset):
     def __init__(self, num_games):
         assert num_games > 0
         self.x = torch.tensor([]) 
@@ -108,19 +108,22 @@ class Dataset(torch.utils.data.Dataset):
                 possible_move = torch.tensor([])
 
                 # Encode possible moves
-                for move in board.legal_moves:
+                legal_moves = board.legal_moves
+                for move in legal_moves:
                     move_enc = encode_move(move)
                     if possible_move.size(0) == 0: possible_move = move_enc
                     else: possible_move = torch.concat((possible_move, move_enc), dim=0)
 
                 # Append to variables
                 self.possible_moves.append(possible_move)
+                y_enc = list(legal_moves).index(actual_move)
+                y_enc = torch.tensor([[y_enc]])
                 if self.x.size(0) == 0:
                     self.x = tensor_board
-                    self.y = encode_move(actual_move)
+                    self.y = y_enc 
                 else:
                     self.x = torch.vstack((self.x, tensor_board))
-                    self.y = torch.vstack((self.y, encode_move(actual_move)))
+                    self.y = torch.vstack((self.y, y_enc))
 
                 board.push(actual_move)
 
@@ -131,7 +134,7 @@ class Dataset(torch.utils.data.Dataset):
         return self.x.size(0)
 
     def __getitem__(self, index):
-        return self.x[index], self.y[index], self.possible_moves[index].to(device)
+        return self.x[index].detach(), self.y[index].detach(), self.possible_moves[index].to(device).detach()
 
 class PolicyNeuralNetwork (nn.Module):
     def __init__(self) -> None:
@@ -163,16 +166,50 @@ class PolicyNeuralNetwork (nn.Module):
 
         self.model = VNNBlock(weight_model, bias_model)
 
-    def forward (self, x, len_moves):
+    def forward (self, x, possible_moves):
         x = self.neuralNet(x)
-        return self.model(x, len_moves)
+        return self.model(torch.randn(1,10), 20)
+        # return self.model(x, possible_moves.size(0), extra=possible_moves)
 
-dataset = Dataset(1)
-x, y, possible_move = dataset[20]
-print(x.shape)
-print(y.shape)
-print(possible_move.shape)
+# Parameters
+if __name__ == "__main__":
+    # Optimizer and training parameters
+    batch_size = 16
+    validation_size = 64
+    num_games_per_itr = 4
+    lr = 0.001
+    itr = 10_000
 
-for i in possible_move:
-    print("Possible move:", decode_move(i))
-print("actual move:", decode_move(y))
+    criterion = nn.CrossEntropyLoss()
+    nn = PolicyNeuralNetwork().to(device)
+    opt = torch.optim.Adam(nn.parameters(), lr=lr)
+
+    # Training Loop
+    progress_bar = trange(itr)
+    itr = 0
+    mag = 1
+    for i in progress_bar:
+        # Get data
+        dataset = ChessClassificationDatabase(num_games=num_games_per_itr),
+
+        # Train on that data
+        opt.zero_grad()
+        losses = torch.tensor([])
+        for data in dataset:
+            x = data[0][0]
+            y = data[0][1]
+            possible_moves = data[0][2]
+            out = nn(x, possible_moves) 
+            data_loss = criterion(out, y)
+            data_loss = data_loss.unsqueeze(0)
+            if losses.size(0) == 0: losses = data_loss
+            else: losses = torch.concat((losses, data_loss), 0)
+        loss = torch.mean(losses)
+        loss.backward()
+        opt.step()
+
+        progress_bar.set_description(f"Loss: {loss.item():.4f}")
+        i+=1
+
+    # Save Model
+    torch.save(nn, "..\models\ChessEngine.pt")

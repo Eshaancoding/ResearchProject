@@ -16,8 +16,8 @@ bias_model = nn.Sequential(
 
 vnn_block = VNNBlock(weight_model, bias_model)
 
-input = torch.rand(5, 5)
+input = torch.rand(6, 5)
 start = time.time()
-print(vnn_block(input, output_size=10, chunks=1))
+print(vnn_block(input, output_size=10, chunks=1).shape)
 end = time.time()
 print(end-start)
