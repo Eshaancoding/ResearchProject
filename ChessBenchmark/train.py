@@ -3,14 +3,13 @@ from VNN import *
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split
 import chess
-from tqdm import tqdm, trange
+from tqdm import trange
 import linecache
 from random import randint
-from time import sleep
 
 input_database = ".\\chessDB.txt"
+output_model = ".\\model\\ChessEngine.pth"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 # line cache warmup
@@ -91,42 +90,46 @@ class ChessClassificationDatabase(torch.utils.data.Dataset):
         assert num_games > 0
         self.x = torch.tensor([]) 
         self.y = torch.tensor([])
-        self.possible_moves = [] 
+        self.possible_moves = []
 
         len_lines = 3561469
-        for i in range(num_games):
-            line = linecache.getline(".\\chessDB.txt", randint(0, len_lines)+6) 
-            board = chess.Board()
+        i = 0
+        while i < num_games:
+            try:
+                line = linecache.getline(".\\chessDB.txt", randint(0, len_lines)+6) 
+                board = chess.Board()
 
-            line = line.split("###")[1].strip()
-            moves = line.split(" ")
+                line = line.split("###")[1].strip()
+                moves = line.split(" ")
 
-            for move in moves:
-                move = move.split(".")[1]
-                tensor_board = encode_board(board)
-                actual_move = board.parse_san(move)
-                possible_move = torch.tensor([])
+                for move in moves:
+                    move = move.split(".")[1]
+                    tensor_board = encode_board(board)
+                    actual_move = board.parse_san(move)
+                    possible_move = torch.tensor([])
 
-                # Encode possible moves
-                legal_moves = board.legal_moves
-                for move in legal_moves:
-                    move_enc = encode_move(move)
-                    if possible_move.size(0) == 0: possible_move = move_enc
-                    else: possible_move = torch.concat((possible_move, move_enc), dim=0)
+                    # Encode possible moves
+                    legal_moves = board.legal_moves
+                    for move in legal_moves:
+                        move_enc = encode_move(move)
+                        if possible_move.size(0) == 0: possible_move = move_enc
+                        else: possible_move = torch.concat((possible_move, move_enc), dim=0)
 
-                # Append to variables
-                self.possible_moves.append(possible_move)
-                y_enc = list(legal_moves).index(actual_move)
-                y_enc = torch.tensor([[y_enc]])
-                if self.x.size(0) == 0:
-                    self.x = tensor_board
-                    self.y = y_enc 
-                else:
-                    self.x = torch.vstack((self.x, tensor_board))
-                    self.y = torch.vstack((self.y, y_enc))
+                    # Append to variables
+                    self.possible_moves.append(possible_move)
+                    y_enc = list(legal_moves).index(actual_move)
+                    y_enc = torch.tensor([[y_enc]])
+                    if self.x.size(0) == 0:
+                        self.x = tensor_board
+                        self.y = y_enc 
+                    else:
+                        self.x = torch.vstack((self.x, tensor_board))
+                        self.y = torch.vstack((self.y, y_enc))
 
-                board.push(actual_move)
-
+                    board.push(actual_move)
+                    i += 1
+            except:
+                continue
         self.x.to(device)
         self.y.to(device)
 
@@ -153,25 +156,23 @@ class PolicyNeuralNetwork (nn.Module):
         d_model = 16
 
         weight_model = nn.Sequential(
-            nn.Linear(d_model*2+1, 16),
+            nn.Linear(65, 16),
             nn.Tanh(),
             nn.Linear(16, 1),
         ) 
 
         bias_model = nn.Sequential(
-            nn.Linear(d_model+1, 12),
+            nn.Linear(49, 12),
             nn.Tanh(),
             nn.Linear(12, 1),
         )
 
-        self.model = VNNBlock(weight_model, bias_model)
+        self.model = VNNBlock(d_model, weight_model, bias_model)
 
     def forward (self, x, possible_moves):
         x = self.neuralNet(x)
-        return self.model(torch.randn(1,10), 20)
-        # return self.model(x, possible_moves.size(0), extra=possible_moves)
+        return self.model(x, possible_moves.size(1), possible_moves)
 
-# Parameters
 if __name__ == "__main__":
     # Optimizer and training parameters
     batch_size = 16
@@ -196,9 +197,9 @@ if __name__ == "__main__":
         opt.zero_grad()
         losses = torch.tensor([])
         for data in dataset:
-            x = data[0][0]
+            x = data[0][0].unsqueeze(0)
             y = data[0][1]
-            possible_moves = data[0][2]
+            possible_moves = data[0][2].unsqueeze(0)
             out = nn(x, possible_moves) 
             data_loss = criterion(out, y)
             data_loss = data_loss.unsqueeze(0)
@@ -209,7 +210,7 @@ if __name__ == "__main__":
         opt.step()
 
         progress_bar.set_description(f"Loss: {loss.item():.4f}")
-        i+=1
 
-    # Save Model
-    torch.save(nn, "..\models\ChessEngine.pt")
+        if i % 100 == 0 and i != 0:  
+            # Save Model
+            torch.save(nn, output_model)

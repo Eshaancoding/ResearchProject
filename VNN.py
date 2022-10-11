@@ -12,7 +12,7 @@ class PosEncIndex(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         length = torch.max(x).item()+1
         
-        pe = torch.zeros(length, self.d_model)
+        pe = torch.zeros((length, self.d_model))
         position = torch.arange(0, length).unsqueeze(1)
         div_term = torch.exp((torch.arange(0, self.d_model, 2, dtype=torch.float) *
                             -(math.log(10000.0) / self.d_model)))
@@ -22,7 +22,7 @@ class PosEncIndex(nn.Module):
         return pe[x]
 
 class VNNBlock (nn.Module):
-    def __init__(self, weight_nn, bias_nn, d_model) -> None:
+    def __init__(self, d_model, weight_nn, bias_nn) -> None:
         super().__init__()
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
@@ -84,7 +84,8 @@ class VNNBlock (nn.Module):
     def forward (self, x, output_size, extra_out=None, chunks=1):
         # Extra Out size: 
         # first dim is the batch size, second dim is the output space, third dim is the vector added during weight 
-        assert x.size(0) == extra_out.size(0), f"Batch size of x ({x.size(0)}) is the same as the batch size of extra_out ({extra_out.size(0)})"
+        if extra_out != None:
+            assert x.size(0) == extra_out.size(0), f"Batch size of x ({x.size(0)}) is the same as the batch size of extra_out ({extra_out.size(0)})"
 
         if chunks == "all": chunks = output_size
         elif chunks == "none": chunks = 0
