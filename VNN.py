@@ -8,11 +8,12 @@ class PosEncIndex(nn.Module):
     def __init__(self, d_model: int):
         super().__init__()
         self.d_model = d_model
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def forward(self, x: Tensor) -> Tensor:
         length = torch.max(x).item()+1
         
-        pe = torch.zeros((length, self.d_model))
+        pe = torch.zeros((length, self.d_model)).to(self.device)
         position = torch.arange(0, length).unsqueeze(1)
         div_term = torch.exp((torch.arange(0, self.d_model, 2, dtype=torch.float) *
                             -(math.log(10000.0) / self.d_model)))
@@ -81,7 +82,7 @@ class VNNBlock (nn.Module):
         f = r-a  # free inside reserved
         return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
 
-    def forward (self, x, output_size, extra_out=None, chunks=1):
+    def forward (self, x, output_size, extra_out=None, chunks="all"):
         # Extra Out size: 
         # first dim is the batch size, second dim is the output space, third dim is the vector added during weight 
         if extra_out != None:
