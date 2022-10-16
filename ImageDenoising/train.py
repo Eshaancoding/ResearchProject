@@ -7,6 +7,8 @@ from random import randint
 from torchvision.datasets import MNIST
 from torch.utils.data import random_split, DataLoader, Dataset
 import torchvision.transforms as transforms
+import PIL
+import numpy as np
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -24,15 +26,16 @@ mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
 class AddGaussianNoise(object):
     def __init__(self, std=1.):
         self.std = std
+        print(self.std)
         
     def __call__(self, tensor):
-        return torch.clip(tensor + torch.randn(tensor.size()) * self.std, 0, 1)
+        return torch.clamp(tensor + (torch.rand_like(tensor) * self.std), 0, 1)
     
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(0, self.std)
 
 class MNISTDatasetSize (Dataset):
-    def __init__(self, size=512, mag=1, std_noise=0.7, use_test=False) -> None:
+    def __init__(self, size=512, mag=1, std_noise=0.25, use_test=False) -> None:
         super().__init__()
 
         self.mag = mag
@@ -84,6 +87,17 @@ class MNISTDatasetSize (Dataset):
 
         x = transformX(image).to(torch.float).to(device)
         y = transformY(image).to(torch.float).to(device)
+        
+        # Print image        
+        # print(x.squeeze(0).numpy().shape)
+        # x_img = PIL.Image.fromarray(np.uint8(x.squeeze(0).numpy()*255))
+        # x_img = x_img.resize((500, 500), PIL.Image.NEAREST)
+        # x_img.show() 
+        # y_img = PIL.Image.fromarray(np.uint8(y.squeeze(0).numpy()*255))
+        # y_img = y_img.resize((500, 500), PIL.Image.NEAREST)
+        # y_img.show()
+        # exit(0)
+
         return x, y
 
 # Model
@@ -104,7 +118,7 @@ class AutoEncodingModel (nn.Module):
             nn.Tanh(),
             nn.Linear(12, 1),
         )
-        self.output_block = VNNBlock(output_weight_model, output_bias_model)
+        self.output_block = VNNBlock(d_model, output_weight_model, output_bias_model)
 
         #* Encoder & Decoder
         self.encoder = nn.Sequential(
@@ -178,8 +192,7 @@ opt = torch.optim.Adam(model.parameters(), lr=lr)
 progress_bar = trange(itr)
 for i in progress_bar:
     mag = randint(1,3)
-    mag = 3
-    dataset = MNISTDatasetSize(size_per_itr, mag=mag, std_noise=0.7) 
+    dataset = MNISTDatasetSize(size_per_itr, mag=mag, std_noise=0.25) 
     dataset = DataLoader(dataset, batch_size=batch_size)
     for x, y in dataset: 
         # Train
