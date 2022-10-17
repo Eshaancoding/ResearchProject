@@ -93,6 +93,7 @@ class DQN:
 
         # Check if model path exists, and if so load the model
         if self.model_path != None and self.log_per_epi != None and exists(model_path):
+            print(f"Loading model from path: {model_path}")
             self.model = torch.load(model_path, map_location=torch.device(self.device))
 
         # Get target function (stable in training)

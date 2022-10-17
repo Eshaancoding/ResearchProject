@@ -5,21 +5,21 @@ import torch
 
 # Declare model
 model = nn.Sequential(
-    nn.Linear(2, 10),
+    nn.Linear(2, 100),
     nn.ReLU(),
-    nn.Linear(10, 3),
+    nn.Linear(100, 3),
 )
 
 # Declare trainer
 trainer = DQN(
     model=model,
-    replay_mem_max_len=10_000,
-    epsilon=0.99,
-    batch_size=32,
+    replay_mem_max_len=500,
+    epsilon=0.1,
+    batch_size=64,
     gamma=0.99,
     lr=0.01,
     model_path="MountainCarDQNTest.pth",
-    log_per_epi=1000,
+    log_per_epi=500,
     update_target_model_per_epi=15,
     max_test_itr=100
 )
@@ -28,10 +28,11 @@ trainer = DQN(
 env = gym.make('MountainCar-v0')
 
 # Train model
-trainer.train(
-    env=env,
-    num_episodes=100_000,
-    use_database=False, # Only if we are using chess database
-    use_tqdm=True,
-    render=False
-)
+#trainer.train(
+        #    env=env,
+        #num_episodes=5_000,
+        #use_database=False, # Only if we are using chess database
+        #use_tqdm=True,
+        #render=False
+        #)
+trainer.test(env, 10000, render=True)
