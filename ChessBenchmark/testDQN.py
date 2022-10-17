@@ -18,8 +18,8 @@ trainer = DQN(
     batch_size=32,
     gamma=0.99,
     lr=0.01,
-    model_path=None,
-    log_per_epi=None,
+    model_path="MountainCarDQNTest.pth",
+    log_per_epi=1000,
     update_target_model_per_epi=15,
     max_test_itr=100
 )
