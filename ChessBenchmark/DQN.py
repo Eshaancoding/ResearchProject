@@ -87,7 +87,6 @@ class DQN:
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.gamma = gamma
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.mse_loss = torch.nn.MSELoss()
 
         # Device
@@ -173,8 +172,6 @@ class DQN:
             
             loss = self.mse_loss(out, target)
             loss.backward()
-            if loss.item() > 10:
-                raise Exception("SDFSDFSDF")
             self.opt.step()
             # log progress bar
             if use_tqdm: 
