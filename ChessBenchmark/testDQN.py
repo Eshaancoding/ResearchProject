@@ -44,7 +44,6 @@ class CustomEnv ():
         
     def step (self, action):
         self.itr += 1
-
         reward = 4 - abs(self.random_integer - action)
 
         self.random_integer = randint(0, 4)
@@ -59,16 +58,16 @@ class CustomEnv ():
         return self.x, reward, is_done, ""
 
 env = CustomEnv()
-# env = gym.make('CartPole-v1')
 
 # Train or test model
 if test:
-    trainer.test(env, 10000, render=True)
+    trainer.test(env, render=False)
 else:
     trainer.train(
         env=env,
-        num_episodes=5_000,
+        # num_episodes=5_000,
+        num_episodes=1,
         use_database=False, # Only if we are using chess database
-        use_tqdm=True,
+        use_tqdm=False,
         render=False
     )
