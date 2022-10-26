@@ -5,11 +5,11 @@ test = False
 
 # Declare model
 model = nn.Sequential(
-    nn.Linear(4, 15),
+    nn.Linear(5, 15),
     nn.ReLU(),
     nn.Linear(15, 30),
     nn.ReLU(),
-    nn.Linear(30, 2),
+    nn.Linear(30, 5),
 )
 
 # Declare trainer
@@ -42,7 +42,7 @@ class CustomEnv ():
         self.x = [0,0,0,0,0]
         self.x[self.random_integer] = 1
 
-        return self.x
+        return self.x, []
         
     def step (self, action):
         self.itr += 1
@@ -57,10 +57,10 @@ class CustomEnv ():
             is_done = True
             self.itr = 0
         
-        return self.x, reward, is_done, ""
+        return self.x, reward, is_done, "", ""
 
-# env = CustomEnv()
-env = gym.make("CartPole-v1", render_mode="rgb_array")
+env = CustomEnv()
+#env = gym.make("CartPole-v1", render_mode="rgb_array")
 
 # Train or test model
 if test:
@@ -72,5 +72,5 @@ else:
         # num_episodes=1,
         use_database=False, # Only if we are using chess database
         use_tqdm=True,
-        render=True
+        render=False
     )
