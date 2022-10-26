@@ -1,5 +1,6 @@
 import torch
 from random import randint
+import numpy as np
 
 class ReplayMemory ():
     def __init__(self, max_len) -> None:
@@ -14,6 +15,8 @@ class ReplayMemory ():
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def addToTensor (self, origTensor, addTensor):
+        if isinstance(addTensor, np.ndarray):
+            addTensor = torch.from_numpy(addTensor).unsqueeze(0).to(torch.float).to(self.device)
         if isinstance(addTensor, bool):
             if addTensor: 
                 addTensor = torch.tensor([1]).to(torch.float).to(self.device)
@@ -50,7 +53,7 @@ class ReplayMemory ():
 
         for i in range(batch_size):
             if i >= len(indexes):
-                random_index = randint(0, len(self.states))
+                random_index = randint(0, len(self.states)-1)
             else: 
                 random_index = indexes[i] 
             

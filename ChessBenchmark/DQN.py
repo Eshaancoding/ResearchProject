@@ -53,24 +53,26 @@ class DQN:
     def test (self, env, render):
         avg_reward = 0
         done = False 
-        state = env.reset()
+        state, _ = env.reset()
+        state = list(state)
         itr = 0
 
-        is_correct = 0
-        total = 0
-        while not done:
+        for i in range(10000):
             x = torch.tensor(state).to(torch.float).to(self.device)
             move = self.model(x)
-            state, reward, done, _ = env.step(torch.argmax(move, dim=0).item())
+            state, reward, done, _, _ = env.step(torch.argmax(move, dim=0).item())
+            state = list(state)
             avg_reward += reward
-            if reward == 4: is_correct += 1
-            total += 1 
             
             itr += 1
             if render:
                 env.render()
 
-        return is_correct / total
+            if done:
+                state, _ = env.reset()
+                state = list(state)
+
+        return avg_reward / itr
 
     def train (self, env, num_episodes, use_database=True, use_tqdm=False, render=False):
         if use_tqdm: progress_bar = trange(num_episodes)
@@ -87,7 +89,8 @@ class DQN:
                 # 1/3 of the chance to draw from master database
                 self.replay_mem.add(*env.get_database())
             else:
-                state = env.reset()
+                state, _ = env.reset()
+                state = list(state)
                 done = False
                 # Go to the actual environment
                 while not done: 
@@ -99,7 +102,8 @@ class DQN:
                         x = torch.tensor(state).to(torch.float).to(self.device)
                         move = torch.argmax(self.model(x)).item()
 
-                    next_state, reward, done, _ = env.step(move)
+                    next_state, reward, done, _, _ = env.step(move)
+                    next_state = list(next_state)
                     self.replay_mem.add(move, state, next_state, reward, done) 
                     state = next_state
 
