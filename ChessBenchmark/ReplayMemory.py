@@ -49,7 +49,7 @@ class ReplayMemory ():
         actions_return = [] 
 
         for i in range(batch_size):
-            if i > len(indexes):
+            if i >= len(indexes):
                 random_index = randint(0, len(self.states))
             else: 
                 random_index = indexes[i] 
@@ -61,4 +61,3 @@ class ReplayMemory ():
             actions_return.append(self.actions[random_index]) 
     
         return actions_return, states_return, next_states_return, rewards_return, dones_return
-

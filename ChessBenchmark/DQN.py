@@ -28,7 +28,7 @@ class DQN:
         self.batch_size = batch_size
         self.gamma = gamma
         self.mse_loss = torch.nn.MSELoss()
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=lr)
+        self.lr = lr
 
         # Device
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,22 +56,28 @@ class DQN:
         state = env.reset()
         itr = 0
 
+        is_correct = 0
+        total = 0
         while not done:
             x = torch.tensor(state).to(torch.float).to(self.device)
             move = self.model(x)
             state, reward, done, _ = env.step(torch.argmax(move, dim=0).item())
             avg_reward += reward
+            if reward == 4: is_correct += 1
+            total += 1 
+            
             itr += 1
             if render:
                 env.render()
 
-        return avg_reward / itr
+        return is_correct / total
 
     def train (self, env, num_episodes, use_database=True, use_tqdm=False, render=False):
         if use_tqdm: progress_bar = trange(num_episodes)
         else: progress_bar = range(num_episodes)
         last_saved_itr = "Not saved" 
         avg_reward = 0
+        opt = torch.optim.SGD(self.model.parameters(), lr=self.lr)
 
         for episode in progress_bar:
             if use_database: database_rand = randint(0, 2)
@@ -101,25 +107,26 @@ class DQN:
             action_batch, state_batch, next_state_batch, rewards_batch, done_batch = self.replay_mem.get_batch(self.batch_size)
             y = rewards_batch + (self.gamma * torch.max(self.target_model(next_state_batch), dim=1).values * (1 - done_batch))
             
-            # Train on y value as target
-            self.opt.zero_grad() 
-            out = self.model(state_batch)
-            
             # Set the y value that is corresponding with the target
             # If there is anyway to do this without a for loop, let me know. 
+            
+            # train 
+            opt.zero_grad() 
+            out = self.model(state_batch)
+
             target = out.detach().clone()
             for i in range(self.batch_size):
-                print("Action =",action_batch[i])
-                print("State =", state_batch[i])
-                print("Reward =", rewards_batch[i])
-                print("Previous target =",target[i][action_batch[i]])
+                # print("State =", state_batch[i])
+                # print("Reward =", rewards_batch[i])
+                # print("Previous target =",target[i])
                 target[i][action_batch[i]] = y[i]
-                print("after target =",y[i])
-                print("------------------------------")
-            
+                # print("Target =",target[i])
+                # print("------------------------------")
+
             loss = self.mse_loss(out, target)
             loss.backward()
-            self.opt.step()
+            opt.step()
+
             # log progress bar
             if use_tqdm: 
                 progress_bar.set_description(f"Episode: {episode} Avg reward: {avg_reward:.2f} loss: {loss.item():.3f} model saved: {last_saved_itr}")
@@ -135,7 +142,6 @@ class DQN:
 
                 # Test model
                 avg_reward = self.test(env=env, render=render) 
-
         
         if self.model_path != None and self.save_per_epi != None and episode != 0 and episode % self.save_per_epi == 0: 
             torch.save(self.model, self.model_path) 

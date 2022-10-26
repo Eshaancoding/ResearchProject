@@ -14,14 +14,14 @@ model = nn.Sequential(
 trainer = DQN(
     model=model,
     replay_mem_max_len=1_000,
-    epsilon=0.5,
+    epsilon=0.15,
     batch_size=16,
     gamma=0.98,
     lr=0.01,
     model_path=None,
     should_load_from_path=False, 
     save_per_epi=100,
-    update_target_model_per_epi=100,
+    update_target_model_per_epi=1000,
 )
 
 # Make environment
@@ -58,6 +58,7 @@ class CustomEnv ():
         return self.x, reward, is_done, ""
 
 env = CustomEnv()
+# env =   j
 
 # Train or test model
 if test:
@@ -65,9 +66,9 @@ if test:
 else:
     trainer.train(
         env=env,
-        # num_episodes=5_000,
-        num_episodes=1,
+        num_episodes=10_000,
+        # num_episodes=1,
         use_database=False, # Only if we are using chess database
-        use_tqdm=False,
+        use_tqdm=True,
         render=False
     )
