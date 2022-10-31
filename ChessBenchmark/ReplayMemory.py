@@ -13,6 +13,7 @@ class ReplayMemory ():
         self.actions = []
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
 
     def addToTensor (self, origTensor, addTensor):
         if isinstance(addTensor, np.ndarray):

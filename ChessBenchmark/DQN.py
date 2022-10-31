@@ -36,6 +36,7 @@ class DQN:
 
         # Device
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
 
         # Model saving
         self.model_path = model_path
