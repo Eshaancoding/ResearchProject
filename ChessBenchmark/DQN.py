@@ -7,6 +7,8 @@ from ChessEnv import *
 from os.path import exists
 from copy import deepcopy
 from ReplayMemory import *
+import time
+import gym
 
 class DQN:
     def __init__(self, 
@@ -20,6 +22,7 @@ class DQN:
         should_load_from_path,          # If it should load the model from the specified model_path argument
         save_per_epi,                   # Save the model per # episodes (could be None to disable saving the model)
         update_target_model_per_epi,    # Update target weights with the original model weights per # epsidoes 
+        itr_limit,                      # Max amount of iterations during testing
     ) -> None:
 
         self.model = model # The model will act as a value function but will output the value of each output in the output layer of the neural network, thus acting as a q-value function
@@ -29,6 +32,7 @@ class DQN:
         self.gamma = gamma
         self.mse_loss = torch.nn.MSELoss()
         self.lr = lr
+        self.itr_limit = itr_limit
 
         # Device
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -51,26 +55,26 @@ class DQN:
         self.model.to(self.device)
 
     def test (self, env, render):
+        env = gym.make("MountainCar-v0")
         avg_reward = 0
         done = False 
         state, _ = env.reset()
         state = list(state)
         itr = 0
 
-        for i in range(10000):
+        for _ in range(1000):
             x = torch.tensor(state).to(torch.float).to(self.device)
             move = self.model(x)
             state, reward, done, _, _ = env.step(torch.argmax(move, dim=0).item())
             state = list(state)
             avg_reward += reward
-            
-            itr += 1
             if render:
                 env.render()
-
             if done:
                 state, _ = env.reset()
                 state = list(state)
+            itr += 1
+        env.close()
 
         return avg_reward / itr
 
@@ -92,7 +96,7 @@ class DQN:
                 state, _ = env.reset()
                 state = list(state)
                 done = False
-                # Go to the actual environment
+                i = 0
                 while not done: 
                     rand_num = randint(0, 100) 
                     if rand_num < self.epsilon * 100: 
@@ -106,6 +110,9 @@ class DQN:
                     next_state = list(next_state)
                     self.replay_mem.add(move, state, next_state, reward, done) 
                     state = next_state
+                    i += 1
+                    if i == self.itr_limit: 
+                        break
 
             # Sample random minibatch of transitions from D, and get expected y value
             action_batch, state_batch, next_state_batch, rewards_batch, done_batch = self.replay_mem.get_batch(self.batch_size)
@@ -126,6 +133,7 @@ class DQN:
                 target[i][action_batch[i]] = y[i]
                 # print("Target =",target[i])
                 # print("------------------------------")
+            print("target =",target)
 
             loss = self.mse_loss(out, target)
             loss.backward()
@@ -133,6 +141,8 @@ class DQN:
 
             # log progress bar
             if use_tqdm: 
+                # Test model
+                avg_reward = self.test(env=env, render=render) 
                 progress_bar.set_description(f"Episode: {episode} Avg reward: {avg_reward:.2f} loss: {loss.item():.3f} model saved: {last_saved_itr}")
 
             # Save model
@@ -144,8 +154,6 @@ class DQN:
             if episode != 0 and episode % self.update_target_model_per_epi == 0:
                 self.target_model.load_state_dict(self.model.state_dict())
 
-                # Test model
-                avg_reward = self.test(env=env, render=render) 
         
         if self.model_path != None and self.save_per_epi != None and episode != 0 and episode % self.save_per_epi == 0: 
             torch.save(self.model, self.model_path) 
