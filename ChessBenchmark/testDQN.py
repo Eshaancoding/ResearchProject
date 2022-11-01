@@ -4,26 +4,31 @@ from DQN import *
 from torch import nn
 
 model = nn.Sequential(
-    nn.Linear(4, 15),
+    nn.Linear(4, 16),
     nn.ReLU(),
-    nn.Linear(15, 30),
+    nn.Linear(16, 16),
     nn.ReLU(),
-    nn.Linear(30, 2),
+    nn.Linear(16, 2),
 )
 
 # Declare trainer
 trainer = DQN(
     model=model,
+
     replay_mem_max_len=1_000,
-    epsilon=0.85,
-    batch_size=16,
-    gamma=0.98,
-    lr=0.01,
+    batch_size=32,
+    gamma=0.95,
+    lr=0.001,
+
+    update_target_model_per_epi=10,
+    epsilon=1,
+    epsilon_decay=0.995,
+    epsilon_min=0.1,
+    test_per_epi=1000,
+
     model_path=None,
     should_load_from_path=False, 
     save_per_epi=100,
-    update_target_model_per_epi=1000,
-    itr_limit=1_000
 )
 
 # Make environment
@@ -60,9 +65,10 @@ class CustomEnv ():
         return self.x, reward, is_done, ""
 
 # env = CustomEnv()
-env = gym.make("CartPole-v1", render_mode="rgb_array")
+env = gym.make("CartPole-v1")
 
 # Train or test model
+test = False
 if test:
     trainer.test(env, render=False)
 else:
