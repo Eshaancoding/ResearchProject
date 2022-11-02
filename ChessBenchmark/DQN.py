@@ -67,22 +67,20 @@ class DQN:
 
         avg_reward = 0
         done = False 
-        state, _ = test_env.reset()
+        state, possible_move, _ = test_env.reset()
         state = list(state)
         itr = 0
 
         while not done:
             x = torch.tensor(state).to(torch.float).to(self.device)
-            move = torch.argmax(self.model(x)).item()
+            possible_move = torch.tensor(possible_move).to(torch.float).to(self.device)
+            move = torch.argmax(self.model(x, possible_move)).item()
 
-            state, reward, done, _, _ = test_env.step(move)
-            if done: 
-                reward = -10
+            state, possible_move, reward, done, _, _ = test_env.step(move)
 
             state = list(state)
             avg_reward += reward
             itr += 1
-        test_env.close()
 
         return avg_reward / itr
 
@@ -101,7 +99,7 @@ class DQN:
                 # 1/3 of the chance to draw from master database
                 self.replay_mem.add(*env.get_database())
             else:
-                state, _ = env.reset()
+                state, possible_moves, _ = env.reset()
                 state = list(state)
                 done = False
                 i = 0
@@ -112,12 +110,12 @@ class DQN:
                         move = env.action_space.sample()
                     else:
                         x = torch.tensor(state).to(torch.float).to(self.device)
-                        move = torch.argmax(self.model(x)).item()
+                        possible_moves = torch.tensor(possible_moves).to(torch.float).to(self.device)
+                        move = torch.argmax(self.model(x, possible_moves)).item()
 
                     if self.epsilon > self.epsilon_min: self.epsilon *= self.epsilon_decay
 
-                    next_state, reward, done, _, _ = env.step(move)
-                    if done: reward = -10
+                    next_state, possible_moves, reward, done, _, _ = env.step(move)
                     next_state = list(next_state)
                     self.replay_mem.add(move, state, next_state, reward, done) 
                     state = next_state

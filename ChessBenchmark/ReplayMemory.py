@@ -11,6 +11,7 @@ class ReplayMemory ():
         self.rewards = []
         self.dones = []
         self.actions = []
+        self.extra_states = []
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = "cpu"
@@ -30,18 +31,28 @@ class ReplayMemory ():
         else:
             return torch.concat((origTensor, addTensor), dim=0)
 
-    def add (self, action, state, next_state, reward, done):     
-        self.states.append(state)
-        self.next_states.append(next_state)
-        self.rewards.append(reward)
-        self.dones.append(done)
-        self.actions.append(action)
+    def add (self, action, state, next_state, reward, done, extra_state=None, arrays=False):     
+        if arrays:
+            self.states.extend(state)
+            self.next_states.extend(next_state)
+            self.rewards.extend(reward)
+            self.dones.extend(done)
+            self.actions.extend(action)
+            if extra_state != None: self.extra_states.extend(extra_state)
+        else:
+            self.states.append(state)
+            self.next_states.append(next_state)
+            self.rewards.append(reward)
+            self.dones.append(done)
+            self.actions.append(action)
+            if extra_state != None: self.extra_states.append(extra_state)
 
         self.states = self.states[-self.max_len:]
         self.next_states = self.next_states[-self.max_len:]
         self.rewards = self.rewards[-self.max_len:]
         self.dones = self.dones[-self.max_len:]
         self.actions = self.actions[-self.max_len:]
+        self.extra_states = self.extra_states[-self.max_len:]
         
     def get_batch (self, batch_size):
         indexes = torch.randperm(len(self.states))[:batch_size].tolist()
@@ -50,6 +61,7 @@ class ReplayMemory ():
         next_states_return = torch.tensor([])
         rewards_return = torch.tensor([])
         dones_return = torch.tensor([])
+        extra_states_return = torch.tensor([])
         actions_return = [] 
 
         for i in range(batch_size):
@@ -63,5 +75,6 @@ class ReplayMemory ():
             rewards_return = self.addToTensor(rewards_return, self.rewards[random_index])
             dones_return = self.addToTensor(dones_return, self.dones[random_index])
             actions_return.append(self.actions[random_index]) 
+            extra_states_return = self.addToTensor(extra_states_return, self.extra_states[i])
     
-        return actions_return, states_return, next_states_return, rewards_return, dones_return
+        return actions_return, states_return, next_states_return, rewards_return, dones_return, extra_states_return
