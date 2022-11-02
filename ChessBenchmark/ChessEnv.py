@@ -12,7 +12,7 @@ class ChessActionSpace ():
         self.board = board
 
     def sample (self):
-        return randint(0, len(self.board.legal_moves)-1)
+        return randint(0, len(list(self.board.legal_moves))-1)
 
 class ChessEnv ():
     def __init__(self, chess_db_path=None) -> None:
@@ -74,7 +74,7 @@ class ChessEnv ():
                 y += 1
                 x = 0
 
-        return return_tensor
+        return return_tensor.flatten(start_dim=1)
 
     def reward_function (self, move, board):
         captured_piece = board.piece_at(move.to_square)

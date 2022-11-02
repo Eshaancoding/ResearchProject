@@ -61,7 +61,7 @@ class ReplayMemory ():
         next_states_return = torch.tensor([])
         rewards_return = torch.tensor([])
         dones_return = torch.tensor([])
-        extra_states_return = torch.tensor([])
+        extra_states_return = [] 
         actions_return = [] 
 
         for i in range(batch_size):
@@ -75,6 +75,6 @@ class ReplayMemory ():
             rewards_return = self.addToTensor(rewards_return, self.rewards[random_index])
             dones_return = self.addToTensor(dones_return, self.dones[random_index])
             actions_return.append(self.actions[random_index]) 
-            extra_states_return = self.addToTensor(extra_states_return, self.extra_states[i])
+            extra_states_return.append(self.extra_states[i])
     
         return actions_return, states_return, next_states_return, rewards_return, dones_return, extra_states_return

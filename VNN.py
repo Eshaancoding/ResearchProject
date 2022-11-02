@@ -32,6 +32,7 @@ class VNNBlock (nn.Module):
     def weight_propagation (self, x, output_size, extra_out):
         input_size = x.size(1)
         batch_size = x.size(0)
+    
 
         #* Weight Generation
         # Generate the weight vector
@@ -82,22 +83,20 @@ class VNNBlock (nn.Module):
         f = r-a  # free inside reserved
         return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
 
-    def forward (self, x, output_size, extra_out=None, chunks="all"):
+    def forward (self, x, output_size, extra_out=None, chunks="none"):
         # Extra Out size: 
         # first dim is the batch size, second dim is the output space, third dim is the vector added during weight 
         if extra_out != None:
             assert x.size(0) == extra_out.size(0), f"Batch size of x ({x.size(0)}) is the same as the batch size of extra_out ({extra_out.size(0)})"
 
         if chunks == "all": chunks = output_size
-        elif chunks == "none": chunks = 0
+        elif chunks == "none": chunks = 1
 
         arr = [output_size // chunks for _ in range(chunks)]        
         if output_size % chunks > 0: 
             arr.append(output_size % chunks) 
 
         out = torch.tensor([])
-        output_size = 5
-
         for i in range(len(arr)):
             output = self.weight_propagation(x, arr[i], extra_out)
             if out.size(0) == 0: 
