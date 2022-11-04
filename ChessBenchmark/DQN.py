@@ -68,23 +68,21 @@ class DQN:
         avg_reward = 0
         done = False 
         state, possible_move, _ = test_env.reset()
-        state = list(state)
         itr = 0
 
         while not done:
-            x = torch.tensor(state).to(torch.float).to(self.device)
-            possible_move = torch.tensor(possible_move).to(torch.float).to(self.device)
+            x = state.to(torch.float).to(self.device)
+            possible_move = possible_move.to(torch.float).to(self.device)
             move = torch.argmax(self.model(x, possible_move)).item()
 
             state, possible_move, reward, done, _, _ = test_env.step(move)
 
-            state = list(state)
             avg_reward += reward
             itr += 1
 
         return avg_reward / itr
 
-    def train (self, env, num_episodes, use_database=True, use_tqdm=False, render=False):
+    def train (self, env, num_episodes, use_database=True, use_tqdm=False, render=False, should_test=True):
         if use_tqdm: progress_bar = trange(num_episodes)
         else: progress_bar = range(num_episodes)
         last_saved_itr = "Not saved" 
@@ -100,7 +98,7 @@ class DQN:
                 self.replay_mem.add(*env.get_database())
             else:
                 state, possible_moves, _ = env.reset()
-                state = list(state)
+                state = state
                 done = False
                 i = 0
                 while not done: 
@@ -109,34 +107,38 @@ class DQN:
                         # Do random action
                         move = env.action_space.sample()
                     else:
-                        x = torch.tensor(state).to(torch.float).to(self.device)
-                        possible_moves = torch.tensor(possible_moves).to(torch.float).to(self.device)
+                        x = state.to(torch.float).to(self.device)
+                        possible_moves = possible_moves.to(torch.float).to(self.device)
                         move = torch.argmax(self.model(x, possible_moves)).item()
 
                     if self.epsilon > self.epsilon_min: self.epsilon *= self.epsilon_decay
 
-                    next_state, possible_moves, reward, done, _, _ = env.step(move)
-                    next_state = list(next_state)
-                    self.replay_mem.add(move, state, next_state, reward, done) 
+                    next_state, next_possible_moves, reward, done, _, _ = env.step(move)
+
+                    self.replay_mem.add(move, state, next_state, reward, done, possible_moves, next_possible_moves) 
+                    
                     state = next_state
+                    possible_moves = next_possible_moves
                     i += 1
 
             # Sample random minibatch of transitions from D, and get expected y value
-            action_batch, state_batch, next_state_batch, rewards_batch, done_batch = self.replay_mem.get_batch(self.batch_size)
-            y = rewards_batch + (self.gamma * torch.max(self.target_model(next_state_batch), dim=1).values * (1 - done_batch))
-            
-            # Set the y value that is corresponding with the target
-            # If there is anyway to do this without a for loop, let me know. 
-            
-            # train 
+            losses = torch.tensor([]) 
             opt.zero_grad() 
-            out = self.model(state_batch)
+            for state, extra_state, next_state, extra_next_state, action, reward, done in self.replay_mem.get_batch(self.batch_size):
+                y = reward + (self.gamma * torch.max(self.target_model(next_state, extra_next_state), dim=1).values * (1 - done))
+            
+                # Set the y value that is corresponding with the target
+                # If there is anyway to do this without a for loop, let me know. 
+                
+                # train 
+                out = self.model(state, extra_state)
+                target = out.detach().clone()
+                target[0][action] = y
 
-            target = out.detach().clone()
-            for i in range(self.batch_size):
-                target[i][action_batch[i]] = y[i]
+                loss = self.mse_loss(out, target)
+                losses = torch.hstack((losses, loss))
 
-            loss = self.mse_loss(out, target)
+            loss = torch.mean(losses)
             loss.backward()
             opt.step()
 
@@ -155,7 +157,7 @@ class DQN:
                 self.target_model.load_state_dict(self.model.state_dict())
 
             # Test
-            if episode != 0 and episode % self.test_per_epi == 0: 
+            if episode != 0 and episode % self.test_per_epi == 0 and should_test: 
                 avg_reward = self.test(env=env, render=render) 
 
         if self.model_path != None and self.save_per_epi != None and episode != 0 and episode % self.save_per_epi == 0: 

@@ -75,7 +75,6 @@ else:
     trainer.train(
         env=env,
         num_episodes=10_000,
-        # num_episodes=1,
         use_database=False, # Only if we are using chess database
         use_tqdm=True,
         render=True

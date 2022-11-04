@@ -52,8 +52,6 @@ env = ChessEnv(
 
 state, possible_moves, _ = env.reset()
 
-print(model(state, possible_moves))
-
 # Declare trainer
 trainer = DQN(
     model=model,
@@ -77,8 +75,9 @@ trainer = DQN(
 # Train
 trainer.train(
     env=env,
-    num_episodes=10_000,
+    num_episodes=1_000_000,
     use_database=True,
     use_tqdm=True,
-    render=False
+    render=False,
+    should_test=False
 )

@@ -6,13 +6,8 @@ class ReplayMemory ():
     def __init__(self, max_len) -> None:
         self.max_len = max_len 
 
-        self.states = []
-        self.next_states = []
-        self.rewards = []
-        self.dones = []
-        self.actions = []
-        self.extra_states = []
-
+        self.arr = []
+        
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = "cpu"
 
@@ -31,50 +26,36 @@ class ReplayMemory ():
         else:
             return torch.concat((origTensor, addTensor), dim=0)
 
-    def add (self, action, state, next_state, reward, done, extra_state=None, arrays=False):     
+    def add (self, action, state, next_state, reward, done, extra_state=None, extra_next_state=None, arrays=False):     
         if arrays:
-            self.states.extend(state)
-            self.next_states.extend(next_state)
-            self.rewards.extend(reward)
-            self.dones.extend(done)
-            self.actions.extend(action)
-            if extra_state != None: self.extra_states.extend(extra_state)
+            for i in range(len(action)):
+                self.arr.append((
+                    state[i],
+                    extra_state[i],
+                    next_state[i],
+                    extra_next_state[i],
+                    action[i],
+                    reward[i],
+                    done[i],
+                )) 
         else:
-            self.states.append(state)
-            self.next_states.append(next_state)
-            self.rewards.append(reward)
-            self.dones.append(done)
-            self.actions.append(action)
-            if extra_state != None: self.extra_states.append(extra_state)
+            if isinstance(extra_state, bool):
+                raise KeyError("sdf")
+            self.arr.append((
+                state,
+                extra_state,
+                next_state,
+                extra_next_state,
+                action,
+                reward,
+                done,
+            ))
 
-        self.states = self.states[-self.max_len:]
-        self.next_states = self.next_states[-self.max_len:]
-        self.rewards = self.rewards[-self.max_len:]
-        self.dones = self.dones[-self.max_len:]
-        self.actions = self.actions[-self.max_len:]
-        self.extra_states = self.extra_states[-self.max_len:]
+        self.arr = self.arr[-self.max_len:]
         
     def get_batch (self, batch_size):
-        indexes = torch.randperm(len(self.states))[:batch_size].tolist()
-
-        states_return = torch.tensor([])
-        next_states_return = torch.tensor([])
-        rewards_return = torch.tensor([])
-        dones_return = torch.tensor([])
-        extra_states_return = [] 
-        actions_return = [] 
-
-        for i in range(batch_size):
-            if i >= len(indexes):
-                random_index = randint(0, len(self.states)-1)
-            else: 
-                random_index = indexes[i] 
-            
-            states_return = self.addToTensor(states_return, self.states[random_index])
-            next_states_return = self.addToTensor(next_states_return, self.next_states[random_index])
-            rewards_return = self.addToTensor(rewards_return, self.rewards[random_index])
-            dones_return = self.addToTensor(dones_return, self.dones[random_index])
-            actions_return.append(self.actions[random_index]) 
-            extra_states_return.append(self.extra_states[i])
-    
-        return actions_return, states_return, next_states_return, rewards_return, dones_return, extra_states_return
+        batch = []
+        indexes = torch.randperm(len(self.arr))[:batch_size].tolist() 
+        for index in indexes:
+            batch.append(self.arr[index])
+        return batch
