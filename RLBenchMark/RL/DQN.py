@@ -1,12 +1,10 @@
-from re import S
-from pyparsing import original_text_for
 import torch
 from random import randint
 from tqdm import trange
-from ChessEnv import * 
+from Chess.ChessEnv import * 
 from os.path import exists
 from copy import deepcopy
-from ReplayMemory import *
+from RL.ReplayMemory import *
 import time
 import gym
 

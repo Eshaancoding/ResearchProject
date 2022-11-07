@@ -1,9 +1,8 @@
 import sys; sys.path.append("..\\")
-import sys; sys.path.append("..\\")
 from torch import nn
-from DQN import *
+from RL.DQN import *
 from VNN import *
-from ChessEnv import *
+from Chess.ChessEnv import *
 
 class ChessEngineNN (nn.Module):
     def __init__(self) -> None:
@@ -57,7 +56,7 @@ state, possible_moves, _ = env.reset()
 trainer = DQN(
     model=model,
 
-    replay_mem_max_len=1_000,
+    replay_mem_max_len=100_000,
     batch_size=32,
     gamma=0.95,
     lr=0.001,
@@ -77,7 +76,7 @@ trainer = DQN(
 trainer.train(
     env=env,
     num_episodes=1_000_000,
-    use_database=True,
+    use_database=False,
     use_tqdm=True,
     render=False,
     should_test=False
