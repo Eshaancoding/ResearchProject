@@ -1,4 +1,5 @@
 import sys; sys.path.append("..\\")
+import sys; sys.path.append("..\\")
 from torch import nn
 from DQN import *
 from VNN import *

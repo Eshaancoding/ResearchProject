@@ -2,6 +2,7 @@ from msilib.schema import CustomAction
 import gym
 from DQN import *
 from torch import nn
+from random import randint
 
 model = nn.Sequential(
     nn.Linear(4, 16),
