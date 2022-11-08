@@ -15,11 +15,8 @@ class ChessActionSpace ():
         return randint(0, len(list(self.board.legal_moves))-1)
 
 class ChessEnv ():
-    def __init__(self, chess_db_path=None) -> None:
-        if chess_db_path != None: 
-            self.chess_db_path = chess_db_path
+    def __init__(self) -> None:
         self.board = chess.Board()
-        linecache.getline(chess_db_path, 0) 
         self.action_space = ChessActionSpace(self.board)
 
     # Encoding move
@@ -134,58 +131,58 @@ class ChessEnv ():
 
         return self.encode_board(self.board), possible_move, reward, is_done, None, None
 
-    def get_database (self):
-        len_lines = 3561469
-        line = linecache.getline(self.chess_db_path, randint(0, len_lines)+6) 
-        line = line.split("###")[1].strip()
-        moves = line.split(" ")
+    # def get_database (self):
+    #     len_lines = 3561469
+    #     line = linecache.getline(self.chess_db_path, randint(0, len_lines)+6) 
+    #     line = line.split("###")[1].strip()
+    #     moves = line.split(" ")
 
-        actions = []
-        states = []
-        next_states = []
-        rewards = []
-        is_dones = []
-        possible_moves = []
+    #     actions = []
+    #     states = []
+    #     next_states = []
+    #     rewards = []
+    #     is_dones = []
+    #     possible_moves = []
 
-        board = chess.Board()
-        for index, move in enumerate(moves):
-            # parse move and get initial state
-            move = board.parse_san(move.split(".")[1])
-            state = self.encode_board(board)
+    #     board = chess.Board()
+    #     for index, move in enumerate(moves):
+    #         # parse move and get initial state
+    #         move = board.parse_san(move.split(".")[1])
+    #         state = self.encode_board(board)
 
-            # Encode possible moves (extra state) and get move index (action)
-            possible_move = torch.tensor([])
-            move_index = -1
-            for index, leg_move in enumerate(list(board.legal_moves)):
-                move_enc = self.encode_move(leg_move)
-                if possible_move.size(0) == 0: 
-                    possible_move = move_enc
-                else: 
-                    possible_move = torch.concat((possible_move, move_enc), dim=0)
-                if leg_move == move: move_index = index
+    #         # Encode possible moves (extra state) and get move index (action)
+    #         possible_move = torch.tensor([])
+    #         move_index = -1
+    #         for index, leg_move in enumerate(list(board.legal_moves)):
+    #             move_enc = self.encode_move(leg_move)
+    #             if possible_move.size(0) == 0: 
+    #                 possible_move = move_enc
+    #             else: 
+    #                 possible_move = torch.concat((possible_move, move_enc), dim=0)
+    #             if leg_move == move: move_index = index
 
-            # Push move in board to get reward, get next state
-            reward = self.reward_function(move, board)
-            next_state = self.encode_board(board)
+    #         # Push move in board to get reward, get next state
+    #         reward = self.reward_function(move, board)
+    #         next_state = self.encode_board(board)
 
-            # Check if it is done
-            outcome = board.outcome()
-            is_done = False
-            if outcome != None and index == len(moves) - 1:
-                result = outcome.result()
-                if result == "1-0":   reward = 20
-                elif result == "0-1": reward = -20
-                is_done = True
+    #         # Check if it is done
+    #         outcome = board.outcome()
+    #         is_done = False
+    #         if outcome != None and index == len(moves) - 1:
+    #             result = outcome.result()
+    #             if result == "1-0":   reward = 20
+    #             elif result == "0-1": reward = -20
+    #             is_done = True
 
-            # Append 
-            is_dones.append(is_done)
-            actions.append(move_index)
-            states.append(state)
-            next_states.append(next_state)
-            possible_moves.append(possible_move)
-            rewards.append(reward)
+    #         # Append 
+    #         is_dones.append(is_done)
+    #         actions.append(move_index)
+    #         states.append(state)
+    #         next_states.append(next_state)
+    #         possible_moves.append(possible_move)
+    #         rewards.append(reward)
 
-        return actions, states, next_states, rewards, is_dones, possible_moves, True
+    #     return actions, states, next_states, rewards, is_dones, possible_moves, True
 
     def render (self):
         pass

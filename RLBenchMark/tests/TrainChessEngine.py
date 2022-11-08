@@ -46,11 +46,7 @@ class ChessEngineNN (nn.Module):
 model = ChessEngineNN()
 
 # Declare env
-env = ChessEnv(
-    chess_db_path=".\chessDB.txt"
-)
-
-state, possible_moves, _ = env.reset()
+env = ChessEnv()
 
 # Declare trainer
 trainer = DQN(
@@ -76,8 +72,6 @@ trainer = DQN(
 trainer.train(
     env=env,
     num_episodes=1_000_000,
-    use_database=False,
     use_tqdm=True,
-    render=False,
     should_test=False
 )
