@@ -1,5 +1,5 @@
 from minesweeper.msgame import MSGame
-import random
+from random import randint
 
 class MinesweeperEnv:
     def get_possible_moves (self):
@@ -13,7 +13,7 @@ class MinesweeperEnv:
         return possible_moves
 
     def random_move (self):
-        index = random.randint(0, len(self.possible_moves)-1)
+        index = randint(0, len(self.possible_moves)-1)
         return self.possible_moves[index]
 
     def reset (self, board_size=10, num_mines=20):
@@ -56,4 +56,7 @@ class MinesweeperEnv:
 
 env = MinesweeperEnv()
 state, extra_state = env.reset()
-print(state, len(extra_state))
+index = randint(0, len(extra_state)-1)
+next_state, next_extra_state, reward, is_done, _, _ = env.step(index)
+
+print(len(next_extra_state), next_state)
