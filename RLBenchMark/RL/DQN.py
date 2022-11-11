@@ -3,10 +3,9 @@ from pyparsing import original_text_for
 import torch
 from random import randint
 from tqdm import trange
-from ChessEnv import * 
 from os.path import exists
 from copy import deepcopy
-from ReplayMemory import *
+from RL.ReplayMemory import *
 import time
 import gym
 
@@ -27,8 +26,11 @@ class DQN:
         test_per_epi
     ) -> None:
 
+        # Device
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         self.model = model # The model will act as a value function but will output the value of each output in the output layer of the neural network, thus acting as a q-value function
-        self.replay_mem = ReplayMemory(max_len=replay_mem_max_len)
+        self.replay_mem = ReplayMemory(max_len=replay_mem_max_len, device=self.device)
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.gamma = gamma
@@ -38,9 +40,6 @@ class DQN:
         self.epsilon_min = epsilon_min
         self.test_per_epi = test_per_epi
 
-        # Device
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.device = "cpu"
 
         # Model saving
         self.model_path = model_path
@@ -59,34 +58,29 @@ class DQN:
         self.target_model.to(self.device)
         self.model.to(self.device)
 
-    def test (self, env, render):
-        if render: 
-            test_env = gym.make(env.unwrapped.spec.id, render_mode="human")
-        else:
-            test_env = gym.make(env.unwrapped.spec.id)
-
+    def test (self, env):
         avg_reward = 0
         done = False 
-        state, _ = test_env.reset()
+        state, extra_state = env.reset()
         state = list(state)
         itr = 0
 
         while not done:
             x = torch.tensor(state).to(torch.float).to(self.device)
-            move = torch.argmax(self.model(x)).item()
+            move = torch.argmax(self.model(x, extra_state)).item()
 
-            state, reward, done, _, _ = test_env.step(move)
+            state, extra_state, reward, done = env.step(move)
             if done: 
                 reward = -10
 
             state = list(state)
             avg_reward += reward
             itr += 1
-        test_env.close()
+        env.close()
 
         return avg_reward / itr
 
-    def train (self, env, num_episodes, use_tqdm=False, render=False):
+    def train (self, env, num_episodes, use_tqdm=False):
         if use_tqdm: progress_bar = trange(num_episodes)
         else: progress_bar = range(num_episodes)
         last_saved_itr = "Not saved" 
@@ -94,8 +88,7 @@ class DQN:
         opt = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         for episode in progress_bar:
-            state, _ = env.reset()
-            state = list(state)
+            state, extra_state = env.reset()
             done = False
             i = 0
             while not done: 
@@ -104,16 +97,26 @@ class DQN:
                     # Do random action
                     move = env.action_space.sample()
                 else:
-                    x = torch.tensor(state).to(torch.float).to(self.device)
-                    move = torch.argmax(self.model(x)).item()
+                    x = state.to(torch.float).to(self.device)
+                    extra_state = extra_state.to(torch.float).to(self.device)
+                    move = torch.argmax(self.model(x, extra_state)).item()
 
                 if self.epsilon > self.epsilon_min: self.epsilon *= self.epsilon_decay
 
-                next_state, reward, done, _, _ = env.step(move)
-                if done: reward = -10
-                next_state = list(next_state)
-                self.replay_mem.add(move, state, next_state, reward, done) 
+                next_state, extra_next_state, reward, done = env.step(move)
+
+                self.replay_mem.add(
+                    move, 
+                    state, 
+                    next_state, 
+                    reward, 
+                    done, 
+                    extra_state=extra_state, 
+                    extra_next_state=extra_next_state
+                ) 
+
                 state = next_state
+                extra_state = extra_next_state
                 i += 1
 
             # Sample random minibatch of transitions from D, and get expected y value
@@ -151,7 +154,7 @@ class DQN:
 
             # Test
             if episode != 0 and episode % self.test_per_epi == 0: 
-                avg_reward = self.test(env=env, render=render) 
+                avg_reward = self.test(env=env) 
 
         if self.model_path != None and self.save_per_epi != None and episode != 0 and episode % self.save_per_epi == 0: 
             torch.save(self.model, self.model_path)  

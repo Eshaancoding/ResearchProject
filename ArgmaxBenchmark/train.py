@@ -1,7 +1,9 @@
+import torch.nn.functional as F
 import sys; sys.path.append("..\\")
 from tkinter import W
 from torch import nn
 from VNN import *
+from VNNTwo import *
 import torch
 from random import randint
 from tqdm import trange
@@ -14,12 +16,10 @@ def print_var (var, name=""):
     print("".join(["-" for _ in range(len(str))]))
     print()
 
-control = False
+improved = True
+device = "cuda"
 
-if control: 
-    pass
-else:
-    #* VNN Experiment
+if not improved: 
     d_model = 16
     weight_model = nn.Sequential(
         nn.Linear(d_model*2+1, 16),
@@ -33,37 +33,59 @@ else:
         nn.Linear(12, 1),
     )
 
-    model = VNNBlock(d_model, weight_model, bias_model)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    criterion = nn.CrossEntropyLoss()
+    model = VNNBlock(d_model, weight_model, bias_model, device=device)
+else:
+    model = VNNBlockTwo(initial_size=50, kernel_size=10, device=device)
+    
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+criterion = nn.CrossEntropyLoss()
 
-# Training
-itr = 1_000
-batch_size = 32
-epochs = 10
+# Training Params
+itr = 1_000 
+batch_size = 16
+epochs = 5
+min_length = 200
+max_length = 500
 
+# Training code
 for epoch in range(epochs):
     p = trange(itr)
     for _ in p:
-        length = randint(1,10)
-        x = torch.rand(4,length).to(torch.float)
-        exp_out = torch.argmax(x, dim=1)
+        length = randint(min_length, max_length)
+        x = torch.rand(batch_size, length)/3
+        exp_out = []
+        for i in range(batch_size):
+            select_index = randint(0, length-1) 
+            x[i][select_index] = 1
+            exp_out.append(select_index)
+        exp_out = torch.tensor(exp_out).to(device)
 
+        # train
         optimizer.zero_grad()
         out = model(x, length)
-        loss = criterion(out, exp_out)
+        loss = criterion(out, exp_out.detach())
         loss.backward()
         optimizer.step()
 
         p.set_description(f"Epoch: {epoch+1} loss: {loss.item():.4f}")
-    
+
     # Test
     with torch.no_grad():
-        x = torch.rand(1,10).to(torch.float)
-        out = model(x, 10)
-        exp_out = torch.argmax(x, dim=1)
+        length = 10
+        x = torch.rand(1, length)/3
+        exp_out = []
+        select_index = randint(0, length-1) 
+        x[0][select_index] = 1
+        exp_out.append(select_index)
+        exp_out = torch.tensor(exp_out).to(device)
 
-        loss = criterion(out, exp_out)
-        print(f"Test Validation with loss: {loss.item():.4f}")
-        print(f"Input/Expected Output:\n{x}")
-        print(f"NN Out:\n{torch.softmax(out, dim=1)}")
+        # train
+        optimizer.zero_grad()
+        out = model(x, length)
+        loss = criterion(out, exp_out.detach())
+
+        print("\n================================================")
+        print(f"X: {x}")
+        print(f"Out: {out}")
+        print(f"Loss: {loss}")
+        print("================================================\n")

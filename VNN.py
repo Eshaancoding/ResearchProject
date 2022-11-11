@@ -5,10 +5,10 @@ from torch import Tensor
 import math
 
 class PosEncIndex(nn.Module):
-    def __init__(self, d_model: int):
+    def __init__(self, d_model: int, device):
         super().__init__()
         self.d_model = d_model
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
 
     def forward(self, x: Tensor) -> Tensor:
         length = torch.max(x).item()+1
@@ -23,27 +23,33 @@ class PosEncIndex(nn.Module):
         return pe[x]
 
 class VNNBlock (nn.Module):
-    def __init__(self, d_model, weight_nn, bias_nn) -> None:
+    def __init__(self, d_model, weight_nn, bias_nn, device=None) -> None:
         super().__init__()
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
-        self.pos_enc = PosEncIndex(d_model)
+
+        if device != None:
+            self.pos_enc = PosEncIndex(d_model, device)
+            self.device = device
+            self.to(device)
+        else: 
+            self.pos_enc = PosEncIndex(d_model, device)
 
     def weight_propagation (self, x, output_size, extra_out):
         input_size = x.size(1)
         batch_size = x.size(0)
-    
+        x = x.to(self.device)
 
         #* Weight Generation
         # Generate the weight vector
-        argument_one = torch.arange(input_size)
-        argument_two = torch.arange(output_size)
+        argument_one = torch.arange(input_size).to(self.device)
+        argument_two = torch.arange(output_size).to(self.device)
 
         # Generate the repeat
         argument_one = argument_one.repeat(batch_size, output_size)
         argument_two = argument_two.repeat(batch_size, input_size)
 
-        x_concat = x.repeat(1, output_size).unsqueeze(2).to(x.device)
+        x_concat = x.repeat(1, output_size).unsqueeze(2).to(self.device)
 
         # Positional Encoding + Concat
         argument_one = self.pos_enc(argument_one.detach())
@@ -61,7 +67,7 @@ class VNNBlock (nn.Module):
         #* Bias Generation
 
         # Create Bias Argument
-        argument_one = torch.arange(output_size)
+        argument_one = torch.arange(output_size).to(self.device)
         argument_one = self.pos_enc(argument_one.detach()).squeeze(1)
         argument_one = argument_one.repeat(batch_size, 1, 1)
         argument_two = out.unsqueeze(2)

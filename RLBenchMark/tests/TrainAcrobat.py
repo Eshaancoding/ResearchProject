@@ -50,7 +50,7 @@ class WrapperGym ():
     def reset (self):
         state = self.env.reset()
         state = torch.from_numpy(state)
-        return state, torch.tensor([]), None
+        return state, torch.tensor([])
 
     def step (self, action):
         observation, reward, terminated, _ = self.env.step(action) 
@@ -60,8 +60,9 @@ class WrapperGym ():
         done = False
         if terminated: 
             done = True
+            reward = -10
         
-        return observation, torch.tensor([]), reward, done, None, None
+        return observation, torch.tensor([]), reward, done 
 
 env = WrapperGym()
 
