@@ -16,10 +16,11 @@ def print_var (var, name=""):
     print("".join(["-" for _ in range(len(str))]))
     print()
 
-improved = True
-device = "cuda"
+improved = False
+device = "cpu"
 
 if not improved: 
+    print("============== USING ORIGINAL ===================")
     d_model = 16
     weight_model = nn.Sequential(
         nn.Linear(d_model*2+1, 16),
@@ -27,7 +28,7 @@ if not improved:
         nn.Linear(16, 1),
     ) 
 
-    bias_model = nn.Sequential(
+    bias_model = nn.Sequential( 
         nn.Linear(d_model+1, 12),
         nn.Tanh(),
         nn.Linear(12, 1),
@@ -35,17 +36,18 @@ if not improved:
 
     model = VNNBlock(d_model, weight_model, bias_model, device=device)
 else:
-    model = VNNBlockTwo(initial_size=50, kernel_size=10, device=device)
+    print("============== USING VNN BLOCK 2 ===================")
+    model = VNNBlockTwo(initial_size=5, d_model=32, kernel_size=3, device=device)
     
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 criterion = nn.CrossEntropyLoss()
 
 # Training Params
-itr = 1_000 
+itr = 10_000 
 batch_size = 16
 epochs = 5
-min_length = 200
-max_length = 500
+min_length = 13 
+max_length = 15
 
 # Training code
 for epoch in range(epochs):
@@ -62,16 +64,20 @@ for epoch in range(epochs):
 
         # train
         optimizer.zero_grad()
-        out = model(x, length)
+        if improved:
+            out, i_x, i_x_b = model(x, length, True)
+        else:
+            out = model(x, length)
+            i_x, i_x_b = -1, -1
         loss = criterion(out, exp_out.detach())
         loss.backward()
         optimizer.step()
 
-        p.set_description(f"Epoch: {epoch+1} loss: {loss.item():.4f}")
+        p.set_description(f"Epoch: {epoch+1} loss: {loss.item():.4f} upscale weights: {i_x} upscale_bias {i_x_b}")
 
     # Test
     with torch.no_grad():
-        length = 10
+        length = randint(5,6)
         x = torch.rand(1, length)/3
         exp_out = []
         select_index = randint(0, length-1) 
@@ -80,7 +86,6 @@ for epoch in range(epochs):
         exp_out = torch.tensor(exp_out).to(device)
 
         # train
-        optimizer.zero_grad()
         out = model(x, length)
         loss = criterion(out, exp_out.detach())
 
