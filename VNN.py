@@ -28,12 +28,13 @@ class VNNBlock (nn.Module):
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
 
+        self.pos_enc = PosEncIndex(d_model, device=("cpu" if device == None  else device))
+        
         if device != None:
-            self.pos_enc = PosEncIndex(d_model, device)
             self.device = device
             self.to(device)
         else: 
-            self.pos_enc = PosEncIndex(d_model, device)
+            self.device = "cpu"
 
     def weight_propagation (self, x, output_size, extra_out):
         input_size = x.size(1)

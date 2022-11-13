@@ -1,7 +1,6 @@
 import torch
+from torch import nn, Tensor
 import torch.nn.functional as F
-from torch import nn
-from torch import Tensor
 import math
 
 class PosEncIndex(nn.Module):
@@ -23,57 +22,52 @@ class PosEncIndex(nn.Module):
         return pe[x]
 
 class VNNBlockTwo (nn.Module):
-    def __init__(self, initial_size, d_model, kernel_size, device=None) -> None:
+    def __init__(self, d_model, kernel_size, device=None) -> None:
         super().__init__()
-        self.initial_param = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
-        self.initial_param_bias = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
-        # self.initial_param = torch.ones(1,1,initial_size, initial_size)
-        # self.initial_param_bias = torch.ones(1,1,initial_size, initial_size)
+        self.initial_param = nn.Parameter(torch.randn(1, 1, kernel_size, kernel_size, requires_grad=True))
+        self.initial_param_bias = nn.Parameter(torch.randn(1, 1, kernel_size, kernel_size, requires_grad=True))
 
         self.weight_nn = nn.Sequential(
             nn.Linear(d_model, 48),
             nn.Tanh(),
-            nn.Linear(48, kernel_size*kernel_size+1)
+            nn.Linear(48, kernel_size*kernel_size+1),
+            nn.Tanh()
         )
 
         self.bias_nn = nn.Sequential(
             nn.Linear(d_model, 48),
             nn.Tanh(),
-            nn.Linear(48, kernel_size*kernel_size+1)
+            nn.Linear(48, (kernel_size*kernel_size+1)),
+            nn.Tanh()
         )
 
         self.kernel_size = kernel_size
+        self.pos_enc = PosEncIndex(d_model, device=("cpu" if device == None  else device))
+        self.tanh = nn.Tanh()
 
         if device != None:
             self.device = device 
             self.to(self.device)
-            self.pos_enc = PosEncIndex(d_model, device=device)
         else:
-            self.pos_enc = PosEncIndex(d_model)
+            self.device = "cpu"
 
-    def weight_kernel (self, weight_matrix, index):
+    def expand_matrix (self, matrix, index, use_bias_nn=False):
         inp_pos_enc = self.pos_enc(torch.tensor([index]))
-        nn_out = self.weight_nn(inp_pos_enc)
-        kernel = nn_out[0][:-1].view(1,1,self.kernel_size, self.kernel_size)
+
+        if use_bias_nn:
+            nn_out = self.bias_nn(inp_pos_enc)
+        else:
+            nn_out = self.weight_nn(inp_pos_enc)
+
+        kernel = nn_out[0][:-1].view(1,1,self.kernel_size, self.kernel_size).repeat(1,1,matrix.size(2), matrix.size(2))
         bias = nn_out[0][-1].unsqueeze(0)
         
-        # Pad and then convolution
-        weight_matrix = F.pad(input=weight_matrix, pad=(2,2,2,2), mode="constant", value=0)
-        weight_matrix = F.conv2d(weight_matrix, kernel, bias=bias)        
+        m = nn.Upsample(scale_factor=self.kernel_size, mode="nearest")
+        matrix = m(matrix)
 
-        return weight_matrix
-
-    def bias_kernel (self, bias_matrix, index):
-        inp_pos_enc = self.pos_enc(torch.tensor([index]))
-        nn_out = self.bias_nn(inp_pos_enc)
-        kernel = nn_out[0][:-1].view(1,1,self.kernel_size, self.kernel_size)
-        bias = nn_out[0][-1].unsqueeze(0)
-        
-        # Pad and then convolution
-        bias_matrix = F.pad(input=bias_matrix, pad=(2,2,2,2), mode="constant", value=0)
-        bias_matrix = F.conv2d(bias_matrix, kernel, bias=bias)        
-
-        return bias_matrix
+        out = self.tanh(matrix * kernel + bias)
+         
+        return out
 
     def return_gpu_desc (self):
         r = torch.cuda.memory_reserved(0)
@@ -82,70 +76,41 @@ class VNNBlockTwo (nn.Module):
         return f"Free: {f/1024**2} MB; Allocated: {a/1024**2} MB"
 
     def forward (self, x, output_size, debug=False):
-        is_single_out = False
-        if isinstance(output_size, int) and isinstance(x, torch.Tensor):
-            is_single_out = True
-            optimal_out_size = math.ceil(math.sqrt(x.size(1) * output_size))
-            optimal_bias_size = math.ceil(math.sqrt(output_size))
-
-        else:
-            assert len(x) == len(output_size), "The arr length of x must be equal to the array length of output_size"
-            optimal_out_size = max([math.ceil(math.sqrt(x[i].size(0) * output_size[i])) for i in range(len(output_size))])
-            optimal_bias_size = max([math.ceil(math.sqrt(i)) for i in output_size])
+        assert isinstance(output_size, int) and isinstance(x, torch.Tensor)
+        
+        input_space = x.size(1)
+        optimal_out_size = math.ceil(math.sqrt(x.size(1) * output_size))
+        optimal_bias_size = math.ceil(math.sqrt(output_size))
 
         # Afterwards, deconvolute the weight matrix until it exceeds or equals optimal_out_size
         weight_matrix = self.initial_param
         i_upscale = 0
         while weight_matrix.size(2) < optimal_out_size:
-            weight_matrix = self.weight_kernel(weight_matrix, i_upscale)
+            weight_matrix = self.expand_matrix(weight_matrix, i_upscale, use_bias_nn=False)
             i_upscale += 1
+        weight_matrix = weight_matrix.repeat(x.size(0), 1, 1, 1) 
 
         # Deconvolute the bias matrix until it exceeds or equals optimal_bias_size
         i_upscale_bias = 0
         bias_matrix = self.initial_param_bias
         while bias_matrix.size(2) < optimal_bias_size:
-            bias_matrix = self.bias_kernel(bias_matrix, i_upscale_bias)
+            bias_matrix = self.expand_matrix(bias_matrix, i_upscale_bias, use_bias_nn=True)
             i_upscale_bias += 1
+        bias_matrix = bias_matrix.repeat(x.size(0), 1, 1, 1)
 
-        if not is_single_out: 
-            out = []
-            for index, i in enumerate(x):
-                # Weight matrix
-                i_weight = weight_matrix[0][0].flatten()
-                i_weight = i_weight[:i.size(0) * output_size[index]]
-                i_weight = i_weight.view(i.size(0), output_size[index])
+        # Weight matrix
+        i_weight = weight_matrix.flatten(start_dim=1)
+        i_weight = i_weight.index_select(1, torch.arange(0,input_space*output_size))
+        i_weight = i_weight.view(x.size(0), input_space, output_size)
 
-                # Bias matrix
-                i_bias = bias_matrix[0][0].flatten()
-                i_bias = i_bias[:output_size[index]]
-                
-                # Propagate through input
-                out_i = torch.matmul(i.to(self.device), i_weight) + i_bias
-                
-                # Append to out
-                out.append(out_i.to(self.device))
-            if debug:
-                return out, i_upscale, i_upscale_bias
-            else: 
-                return out
+        # Bias matrix
+        i_bias = bias_matrix.flatten(start_dim=1)
+        i_bias = i_bias.index_select(1, torch.arange(0, output_size))
+
+        # Propagate through input
+        x = x.unsqueeze(1)
+        out_i = torch.bmm(x.to(self.device), i_weight).squeeze(1) + i_bias
+        if debug: 
+            return out_i, i_upscale, i_upscale_bias
         else:
-            # Weight matrix
-            i_weight = weight_matrix[0][0].flatten()
-            i_weight = i_weight[:x.size(1) * output_size]
-            i_weight = i_weight.view(x.size(1), output_size)
-
-            # Bias matrix
-            i_bias = bias_matrix[0][0].flatten()
-            i_bias = i_bias[:output_size]
-
-            # Repeat weight matrix across all outputs
-            i_weight = i_weight.unsqueeze(0).repeat(x.size(0), 1, 1)
-            i_bias = i_bias.unsqueeze(0).repeat(x.size(0), 1, 1)
-
-            # Propagate through input
-            x = x.unsqueeze(1)
-            out_i = torch.bmm(x.to(self.device), i_weight) + i_bias
-            if debug: 
-                return out_i.squeeze(1), i_upscale, i_upscale_bias
-            else:
-                return out_i.squeeze(1)
+            return out_i
