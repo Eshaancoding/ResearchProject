@@ -5,39 +5,73 @@ import torch
 from torch import nn
 from random import randint
 from tqdm import trange
+from torch.utils.data import random_split, DataLoader, Dataset
+import torchvision.transforms as transforms
+from torchvision.datasets import MNIST
 
 # =========================== Create Dataset ============================== 
-min_length = 100
-max_length = 500
-dataset_size = 64
-ones_occurance = 0.3
-x_train = [] 
-y_train = []
-device = "cpu"
+# Get Dataset
+mnist_dataset = MNIST(root="./datasets/", download=True)
+mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
+class MNISTDatasetSize (Dataset):
+    def __init__(self, size=512, mag=1, use_test=False) -> None:
+        super().__init__()
 
-for i in range(dataset_size):
-    length = randint(min_length, max_length)
-    x = torch.zeros(length)
-    indices_one = torch.randperm(length)[:math.ceil(ones_occurance*length)]
-    x[indices_one] = 1
-    x_train.append(x.unsqueeze(0)) 
-    y_train.append(torch.tensor([i]))
+        self.mag = mag
+        self.size = size
+
+        if use_test:
+            left = len(mnist_test_dataset) - size
+            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
+        else:
+            left = len(mnist_dataset) - size
+            self.dataset, _ = random_split(mnist_dataset, (size, left))
+
+    def __len__ (self):
+        return self.size
+
+    def __getitem__(self, index):
+        x, y = self.dataset[index]
+        
+        # Use transformations
+        transform = transforms.Compose([
+            transforms.PILToTensor(),
+        ]) 
+
+        if self.mag == 2:
+            transform = transforms.Compose([
+                transforms.Resize((35, 35)),
+                transforms.ToTensor(),
+            ])
+        elif self.mag == 3:
+            transform = transforms.Compose([
+                transforms.Resize((45, 45)),
+                transforms.ToTensor(),
+            ])
+
+        x = transform(x).flatten().to(torch.float)
+        y = torch.tensor(y).to(torch.long)
+        return x, y
 
 # ======================== Training Paramaters ========================
 use_original = True
 itr = 1_000 
 batch_size = 16
 epochs = 5
-mid_layer_size = 40
+mid_layer_size = 60
 lr = 0.01
 
 # ======================== Test Model ========================
 class VNNBlockTwoModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNBlockTwo(d_model=64, kernel_size=3)
+        self.vnnBlock = VNNBlockTwo(d_model=64, kernel_size=6)
         self.linear_layer = nn.Sequential(
-            nn.Linear(mid_layer_size, dataset_size),
+            nn.Linear(mid_layer_size, 60),
+            nn.Tanh(),
+            nn.Linear(60, 40),
+            nn.Tanh(),
+            nn.Linear(40, 10),
         )
         self.tanh = nn.Tanh()
 
@@ -63,11 +97,21 @@ class VNNBlockModel (nn.Module):
             nn.Linear(12, 1),
         )
 
+        self.linear_layer = nn.Sequential(
+            nn.Linear(mid_layer_size, 60),
+            nn.Tanh(),
+            nn.Linear(60, 40),
+            nn.Tanh(),
+            nn.Linear(40, 10),
+        )
+        self.tanh = nn.Tanh()
+
         self.model = VNNBlock(d_model, weight_model, bias_model)
 
     def forward (self, x):
-        out = self.model(x, dataset_size)
-        return out
+        out = self.model(x, mid_layer_size)
+        out = self.tanh(out)
+        return self.linear_layer(out)
 
 def train_epoch (use_original):
     # ======================== Model Setup ========================
@@ -79,7 +123,7 @@ def train_epoch (use_original):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
 
-    print(f"============= Total Params: {sum(p.numel() for p in model.parameters())} =============")
+    print(f"Total Params: {sum(p.numel() for p in model.parameters())}")
     # ======================== Training Code ========================
     p = trange(itr)
     for _ in p:
