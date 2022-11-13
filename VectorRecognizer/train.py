@@ -11,47 +11,21 @@ from torchvision.datasets import MNIST
 
 # =========================== Create Dataset ============================== 
 # Get Dataset
-mnist_dataset = MNIST(root="./datasets/", download=True)
-mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
-class MNISTDatasetSize (Dataset):
-    def __init__(self, size=512, mag=1, use_test=False) -> None:
-        super().__init__()
+min_length = 100
+max_length = 500
+dataset_size = 64
+ones_occurance = 0.3
+x_train = [] 
+y_train = []
+device = "cpu"
 
-        self.mag = mag
-        self.size = size
-
-        if use_test:
-            left = len(mnist_test_dataset) - size
-            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
-        else:
-            left = len(mnist_dataset) - size
-            self.dataset, _ = random_split(mnist_dataset, (size, left))
-
-    def __len__ (self):
-        return self.size
-
-    def __getitem__(self, index):
-        x, y = self.dataset[index]
-        
-        # Use transformations
-        transform = transforms.Compose([
-            transforms.PILToTensor(),
-        ]) 
-
-        if self.mag == 2:
-            transform = transforms.Compose([
-                transforms.Resize((35, 35)),
-                transforms.ToTensor(),
-            ])
-        elif self.mag == 3:
-            transform = transforms.Compose([
-                transforms.Resize((45, 45)),
-                transforms.ToTensor(),
-            ])
-
-        x = transform(x).flatten().to(torch.float)
-        y = torch.tensor(y).to(torch.long)
-        return x, y
+for i in range(dataset_size):
+    length = randint(min_length, max_length)
+    x = torch.zeros(length)
+    indices_one = torch.randperm(length)[:math.ceil(ones_occurance*length)]
+    x[indices_one] = 1
+    x_train.append(x.unsqueeze(0)) 
+    y_train.append(torch.tensor([i]))
 
 # ======================== Training Paramaters ========================
 use_original = True
@@ -71,7 +45,7 @@ class VNNBlockTwoModel (nn.Module):
             nn.Tanh(),
             nn.Linear(60, 40),
             nn.Tanh(),
-            nn.Linear(40, 10),
+            nn.Linear(40, dataset_size),
         )
         self.tanh = nn.Tanh()
 
@@ -102,7 +76,7 @@ class VNNBlockModel (nn.Module):
             nn.Tanh(),
             nn.Linear(60, 40),
             nn.Tanh(),
-            nn.Linear(40, 10),
+            nn.Linear(40, dataset_size),
         )
         self.tanh = nn.Tanh()
 

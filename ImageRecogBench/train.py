@@ -7,12 +7,13 @@ import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 from tqdm import trange
 import sys; sys.path.append("..\\")
+from VNNTwo import *
 from VNN import *
 
 # Get Device
-device = 'cuda' if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Get Dataset
+# ======================================= Image Recognition Benchmark ===========================================  
 mnist_dataset = MNIST(root="./datasets/", download=True)
 mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
 class MNISTDatasetSize (Dataset):
@@ -23,11 +24,17 @@ class MNISTDatasetSize (Dataset):
         self.size = size
 
         if use_test:
-            left = len(mnist_test_dataset) - size
-            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
+            if size == "full":
+                self.dataset = mnist_test_dataset
+            else:
+                left = len(mnist_test_dataset) - size
+                self.dataset, _ = random_split(mnist_test_dataset, (size, left))
         else:
-            left = len(mnist_dataset) - size
-            self.dataset, _ = random_split(mnist_dataset, (size, left))
+            if size == "full":
+                self.dataset = mnist_dataset
+            else: 
+                left = len(mnist_dataset) - size
+                self.dataset, _ = random_split(mnist_dataset, (size, left))
 
     def __len__ (self):
         return self.size
@@ -55,10 +62,10 @@ class MNISTDatasetSize (Dataset):
         y = torch.tensor(y).to(torch.long).to(device)
         return x, y
 
-# Get Control Policy
-class Policy(nn.Module):
-    def __init__(self, use_VNN=False):
-        super(Policy, self).__init__()
+# ======================================= Convolution Neural Network ===========================================  
+class ConvolutionNN(nn.Module):
+    def __init__(self):
+        super(ConvolutionNN, self).__init__()
         self.conv1 = nn.Sequential(         
             nn.Conv2d(
                 in_channels=1,              
@@ -92,37 +99,54 @@ class Policy(nn.Module):
             nn.MaxPool2d(kernel_size=2),                
         )
 
-        self.use_VNN = use_VNN
-        if use_VNN:
-            # VNN
-            d_model = 16
-            weight_model = nn.Sequential(
-                nn.Linear(d_model*2+1, 16),
-                nn.Tanh(),
-                nn.Linear(16, 1),
-            ) 
-
-            bias_model = nn.Sequential(
-                nn.Linear(d_model+1, 12),
-                nn.Tanh(),
-                nn.Linear(12, 1),
-            )
-
-            self.out = VNNBlock(weight_model, bias_model)
-        else:
-            # fully connected layer, output 10 classes
-            self.out = nn.LazyLinear(10)
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        # flatten the output of conv2 to (batch_size, 32 * 7 * 7)
-        x = x.view(x.size(0), -1)       
-        if self.use_VNN: output = self.out(x, 10)
-        else: output = self.out(x)
-        return output
+        return x
 
+# ======================================= New VNN Model ===========================================  
+class NewVNNModel (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=6, device=device)
+        self.conv2d = ConvolutionNN()
+        self.to(device)
+
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(x.size(0), -1)
+        x, i_upscale, i_upscale_bias = self.vnnBlock(x, 10, debug=True) 
+        return x, i_upscale, i_upscale_bias
+
+# ======================================= Original VNN Model ===========================================  
+class OrigVNNModel (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        d_model = 64
+        weight_model = nn.Sequential(
+            nn.Linear(d_model*2+1, 16),
+            nn.Tanh(),
+            nn.Linear(16, 1),
+        ) 
+
+        bias_model = nn.Sequential( 
+            nn.Linear(d_model+1, 12),
+            nn.Tanh(),
+            nn.Linear(12, 1),
+        )
+
+        self.vnnBlock = VNNBlock(d_model, weight_model, bias_model, device=device)
+        self.conv2d = ConvolutionNN()
+        self.to(device)
+
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(x.size(0), -1)
+        x = self.vnnBlock(x, 10) 
+        return x, -1, -1
+
+# ======================================= Training Loop ===========================================  
 if __name__ == "__main__":
     # Optimizer and training parameters
     use_VNN = True
@@ -135,7 +159,7 @@ if __name__ == "__main__":
     test_mag = 1
 
     criterion = nn.CrossEntropyLoss()
-    policy = Policy(use_VNN).to(device)
+    policy = OrigVNNModel().to(device) # <============================ CHANGE MODEL HERE 
     opt = torch.optim.Adam(policy.parameters(), lr=lr)
 
     # Training Loop
@@ -161,13 +185,13 @@ if __name__ == "__main__":
         # Train on that data
         for x, y in dataset:
             opt.zero_grad()
-            out = policy(x) 
+            out, i_upscale, i_upscale_bias = policy(x) 
             loss = criterion(out, y)
             loss.backward()
             opt.step()
 
-            progress_bar.set_description(f"Loss: {loss.item():.4f} Mag: {mag}")
+            progress_bar.set_description(f"Loss: {loss.item():.4f} Weight ups: {i_upscale} Bias ups: {i_upscale_bias} Mag: {mag}")
         i+=1
 
     # Save Model
-    torch.save(policy, "..\models\ImageRecogModel.pt")
+    torch.save(policy, "..\models\ImageRecogModelOld.pt")

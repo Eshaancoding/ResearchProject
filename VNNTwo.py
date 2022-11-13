@@ -22,10 +22,10 @@ class PosEncIndex(nn.Module):
         return pe[x]
 
 class VNNBlockTwo (nn.Module):
-    def __init__(self, d_model, kernel_size, device=None) -> None:
+    def __init__(self, d_model, initial_size, kernel_size, device=None) -> None:
         super().__init__()
-        self.initial_param = nn.Parameter(torch.randn(1, 1, kernel_size, kernel_size, requires_grad=True))
-        self.initial_param_bias = nn.Parameter(torch.randn(1, 1, kernel_size, kernel_size, requires_grad=True))
+        self.initial_param = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
+        self.initial_param_bias = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
 
         self.weight_nn = nn.Sequential(
             nn.Linear(d_model, 48),
@@ -100,12 +100,12 @@ class VNNBlockTwo (nn.Module):
 
         # Weight matrix
         i_weight = weight_matrix.flatten(start_dim=1)
-        i_weight = i_weight.index_select(1, torch.arange(0,input_space*output_size))
+        i_weight = i_weight.index_select(1, torch.arange(0,input_space*output_size).to(self.device))
         i_weight = i_weight.view(x.size(0), input_space, output_size)
 
         # Bias matrix
         i_bias = bias_matrix.flatten(start_dim=1)
-        i_bias = i_bias.index_select(1, torch.arange(0, output_size))
+        i_bias = i_bias.index_select(1, torch.arange(0, output_size).to(self.device))
 
         # Propagate through input
         x = x.unsqueeze(1)
