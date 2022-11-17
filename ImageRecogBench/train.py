@@ -5,13 +5,18 @@ from torch import nn
 from torch.utils.data import random_split, DataLoader, Dataset
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
-from tqdm import trange
+from tqdm import trange, tqdm
 import sys; sys.path.append("..\\")
 from VNNTwo import *
 from VNN import *
+import time
+import os
+import json
+import matplotlib.pyplot as plt
 
 # Get Device
 device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 
 # ======================================= Image Recognition Benchmark ===========================================  
 mnist_dataset = MNIST(root="./datasets/", download=True)
@@ -146,31 +151,70 @@ class OrigVNNModel (nn.Module):
         x = self.vnnBlock(x, 10) 
         return x, -1, -1
 
+# ======================================= LSTM Model ===========================================  
+class LSTMModel (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        d_model = 25
+        self.in_nn = nn.Linear(1, d_model)
+        self.out_nn = nn.Linear(d_model, 10)
+        self.lstm_model = nn.LSTM(input_size=d_model, hidden_size=d_model)
+        
+        self.conv2d = ConvolutionNN()
+        self.to(device)
+
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(-1, x.size(0), 1)
+        x = self.in_nn(x)
+        x = self.lstm_model(x)[0][-1]
+        x = self.out_nn(x)
+        return x, -1, -1
+
+# ======================================= Validation Loop ===========================================  
+def validation (mag, model):
+    dataset = MNISTDatasetSize(size="full", mag=mag, use_test=True)
+    correct = 0
+    itr = 0
+    p = tqdm(dataset, total=10000)
+    for x, y in p:
+        itr += 1
+        y = y.item()
+        output = torch.softmax(model(x.unsqueeze(0).to(device))[0],1)
+        argmax = torch.argmax(output).item()
+        if argmax == y: correct += 1
+        p.set_description(f"Mag: {mag} Acc: {(correct/itr)*100:.1f}%")
+    return (correct/itr)*100
+
 # ======================================= Training Loop ===========================================  
-if __name__ == "__main__":
-    # Optimizer and training parameters
-    use_VNN = True
+def train (model, name):
+    losses_one = [] # Loss array for graphing
+    losses_two = [] # Loss array for graphing
+    losses_three = [] # Loss array for graphing
 
     batch_size = 16
-    validation_size = 64
     num_samples_per_itr = 4
     lr = 0.001
-    itr = 5_000
-    test_mag = 1
+    itr = 3_000
 
     criterion = nn.CrossEntropyLoss()
-    policy = OrigVNNModel().to(device) # <============================ CHANGE MODEL HERE 
-    opt = torch.optim.Adam(policy.parameters(), lr=lr)
+    model = model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
 
+    # Print number of total params
+    print(f"============================ Training {name} ============================")
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total Params: {total_params}")
+    
     # Training Loop
+    start = time.time()
     progress_bar = trange(itr)
     itr = 0
     mag = 1
-    for i in progress_bar:
+    
+    for _ in progress_bar:
         # Get data
-        if use_VNN: 
-            mag = randint(1,3)
-        else: mag = test_mag
+        mag = randint(1,3)
 
         dataset = DataLoader(
             MNISTDatasetSize(
@@ -183,15 +227,70 @@ if __name__ == "__main__":
         )
 
         # Train on that data
+        avg_loss = 0
         for x, y in dataset:
             opt.zero_grad()
-            out, i_upscale, i_upscale_bias = policy(x) 
+            out, i_upscale, i_upscale_bias = model(x) 
             loss = criterion(out, y)
             loss.backward()
             opt.step()
 
-            progress_bar.set_description(f"Loss: {loss.item():.4f} Weight ups: {i_upscale} Bias ups: {i_upscale_bias} Mag: {mag}")
-        i+=1
+            progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale} b_ups: {i_upscale_bias} mag: {mag}")
 
+            avg_loss += loss.item()
+        avg_loss /= len(dataset)
+        if avg_loss < 5: # For the sake of actually generating a clean loss data 
+            if mag == 1: losses_one.append(avg_loss)
+            if mag == 2: losses_two.append(avg_loss)
+            if mag == 3: losses_three.append(avg_loss)
+
+    # End time
+    elapsed_time = time.time() - start
+    
     # Save Model
-    torch.save(policy, "..\models\ImageRecogModelOld.pt")
+    saved_name = name.replace(" ", "_").lower()
+    dir_path = os.path.join(os.getcwd(), "models")
+    file_path = os.path.join(dir_path, f"{saved_name}.pt") 
+    if not os.path.isdir(dir_path): os.mkdir(dir_path)
+    torch.save(model, file_path)
+    print("Saved model")
+
+    # Test the model
+    print(f"============================ Validating {name} ============================")
+    acc_1 = validation(mag=1, model=model)
+    acc_2 = validation(mag=2, model=model)
+    acc_3 = validation(mag=3, model=model)
+    avg_acc = (acc_1 + acc_2 + acc_3) / 3
+
+    # Return Everything
+    return losses_one, losses_two, losses_three, {saved_name: { "Magnitude 1 Accuracy": acc_1, "Magnitude 2 Accuracy": acc_2, "Magnitude 3 Accuracy": acc_3, "Average Accuracy": avg_acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params}}
+
+# ======================================= Main Loop =========================================== 
+if __name__ == "__main__":
+    trainers = {
+        "New VNN Model": NewVNNModel(), 
+        "LSTM Model":LSTMModel(),
+        "Original VNN Model": OrigVNNModel()
+    }
+    
+    dir_path = os.path.join(os.getcwd(), "data")
+    if not os.path.isdir(dir_path): os.mkdir(dir_path)
+    overall_dict = {}
+    for name in trainers.keys():
+        losses_one, losses_two, losses_three, result = train(trainers[name], name)
+
+        plt.figure()
+        plt.plot(losses_one, label = f"{name} Mag 1")
+        plt.plot(losses_two, label = f"{name} Mag 2")
+        plt.plot(losses_three, label = f"{name} Mag 3")
+        overall_dict.update(result)
+
+        # Save loss data and json data
+        saved_name = name.replace(" ", "_").lower()
+        plt.legend()
+        plt.savefig(os.path.join(dir_path, f"loss_plot_{saved_name}.png"))
+
+    # Save overall dict
+    with open(os.path.join(dir_path, "data.json"), "w") as f:
+        json.dump(overall_dict, f) 
+    print("Saved data")
