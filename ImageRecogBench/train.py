@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 
 # Get Device
 device = "cuda" if torch.cuda.is_available() else "cpu"
-device = "cpu"
 
 # ======================================= Image Recognition Benchmark ===========================================  
 mnist_dataset = MNIST(root="./datasets/", download=True)

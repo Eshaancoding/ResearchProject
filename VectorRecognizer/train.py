@@ -1,61 +1,63 @@
+# Import libraries
+from random import randint
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
+from tqdm import trange, tqdm
 import sys; sys.path.append("..\\")
 from VNNTwo import *
 from VNN import *
-import torch
-from torch import nn
-from random import randint
-from tqdm import trange
-from torch.utils.data import random_split, DataLoader, Dataset
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
+import time
+import os
+import json
+import matplotlib.pyplot as plt
 
-# =========================== Create Dataset ============================== 
-# Get Dataset
-min_length = 100
-max_length = 500
-dataset_size = 64
-ones_occurance = 0.3
-x_train = [] 
-y_train = []
-device = "cpu"
+# Get Device
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-for i in range(dataset_size):
-    length = randint(min_length, max_length)
-    x = torch.zeros(length)
-    indices_one = torch.randperm(length)[:math.ceil(ones_occurance*length)]
-    x[indices_one] = 1
-    x_train.append(x.unsqueeze(0)) 
-    y_train.append(torch.tensor([i]))
+# ======================================= Vector Argmax Benchmark ===========================================  
+class VectorArgmaxBenchmark (Dataset):
+    def __init__(self, width, height, max_not_one) -> None:
+        super().__init__()
+        self.len = height
 
-# ======================== Training Paramaters ========================
-use_original = True
-itr = 1_000 
-batch_size = 16
-epochs = 5
-mid_layer_size = 60
-lr = 0.01
+        # Generate dataset
+        self.x = torch.rand(height, width).to(device)*max_not_one
+        exp_out = []
+        for i in range(height):
+            rand_num = randint(0, width-1)
+            self.x[i][rand_num] = 1
+            exp_out.append(rand_num)
+        self.exp_out = torch.tensor(exp_out).to(device)
 
-# ======================== Test Model ========================
-class VNNBlockTwoModel (nn.Module):
+    def __len__ (self):
+        return self.len 
+
+    def __getitem__(self, index):
+        return self.x[index], self.exp_out[index]
+        
+# ======================================= New VNN Model ===========================================  
+class NewVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNBlockTwo(d_model=64, kernel_size=6)
-        self.linear_layer = nn.Sequential(
-            nn.Linear(mid_layer_size, 60),
-            nn.Tanh(),
-            nn.Linear(60, 40),
-            nn.Tanh(),
-            nn.Linear(40, dataset_size),
-        )
-        self.tanh = nn.Tanh()
+        self.inner = 30
+        self.encoder = VNNBlockTwo(d_model=16, initial_size=10, kernel_size=8, device=device)
+        self.decoder = VNNBlockTwo(d_model=16, initial_size=10, kernel_size=8, device=device)
+        self.nn_mid = nn.Linear(self.inner, self.inner) 
+        self.sigmoid = nn.Sigmoid()
+        self.to(device)
 
     def forward (self, x): 
-        out, i_upscale, i_upscale_bias = self.vnnBlock(x, mid_layer_size, debug=True)
-        out = self.tanh(out)
-        return self.linear_layer(out), i_upscale, i_upscale_bias
+        x = x.view(x.size(0), -1)
+        length = x.size(1)
+        x = self.sigmoid(self.encoder(x, self.inner))
+        x = self.sigmoid(self.nn_mid(x))
+        x, i_upscale, i_upscale_bias = self.decoder(x, length, debug=True) 
+        return x, i_upscale, i_upscale_bias
 
-# ======================== Original Model ========================
-class VNNBlockModel (nn.Module):
+
+# ======================================= Original VNN Model ===========================================  
+class OrigVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
         d_model = 64
@@ -71,72 +73,144 @@ class VNNBlockModel (nn.Module):
             nn.Linear(12, 1),
         )
 
-        self.linear_layer = nn.Sequential(
-            nn.Linear(mid_layer_size, 60),
-            nn.Tanh(),
-            nn.Linear(60, 40),
-            nn.Tanh(),
-            nn.Linear(40, dataset_size),
-        )
-        self.tanh = nn.Tanh()
+        self.vnnBlock = VNNBlock(d_model, weight_model, bias_model, device=device)
+        self.to(device)
 
-        self.model = VNNBlock(d_model, weight_model, bias_model)
+    def forward (self, x): 
+        x = x.view(x.size(0), -1)
+        length = x.size(1)
+        x = self.vnnBlock(x, length) 
+        return x, -1, -1
 
-    def forward (self, x):
-        out = self.model(x, mid_layer_size)
-        out = self.tanh(out)
-        return self.linear_layer(out)
-
-def train_epoch (use_original):
-    # ======================== Model Setup ========================
-    if use_original: 
-        model = VNNBlockModel()
-    else:
-        model = VNNBlockTwoModel()
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.CrossEntropyLoss()
-
-    print(f"Total Params: {sum(p.numel() for p in model.parameters())}")
-    # ======================== Training Code ========================
-    p = trange(itr)
-    for _ in p:
-        index_dataset = randint(0, dataset_size-1) 
-        x = x_train[index_dataset]
-        y = y_train[index_dataset] 
-                
-        # train
-        optimizer.zero_grad()
-        if not use_original:
-            out, i_upscale, i_upscale_bias = model(x)
-        else:
-            out = model(x)
-            i_upscale = -1
-            i_upscale_bias = -1
-        loss = criterion(out, y)
-        loss.backward()
-        optimizer.step()
-
-        p.set_description(f"Loss: {loss.item():.4f} weight upscale: {i_upscale} i_upscale_bias: {i_upscale_bias}")
-
-    # ======================== Test Code ========================
-    correct = 0
-    for i in range(dataset_size):
-        x = x_train[index_dataset]
-        y = y_train[index_dataset]
+# ======================================= Transformers Model ===========================================  
+class TransformersModel (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        d_model = 25
+        self.in_nn = nn.Linear(1, d_model)
+        self.out_nn = nn.Linear(d_model, 10)
+        self.lstm_model = nn.LSTM(input_size=d_model, hidden_size=d_model)
         
-        if not use_original:
-            out, _, _ = model(x)
-        else:
-            out = model(x)
-        out = torch.softmax(out.flatten(), dim=0)
-        if torch.argmax(out,dim=0) == y[0].item():
-            correct += 1
-    percentage_acc = (correct/dataset_size)*100
-    print(f"Test Validation Accuracy: {percentage_acc:.2f}%")
+        self.to(device)
 
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(-1, x.size(0), 1)
+        x = self.in_nn(x)
+        x = self.lstm_model(x)[0][-1]
+        x = self.out_nn(x)
+        return x, -1, -1
 
-print("======================== USING ORIGINAL ========================")
-train_epoch(use_original=True)
-print("======================== USING NEW ========================")
-train_epoch(use_original=False)
+# ======================================= Validation Loop ===========================================  
+def validation (mag, model):
+    dataset = VectorArgmaxBenchmark()
+    correct = 0
+    itr = 0
+    p = tqdm(dataset, total=10000)
+    for x, y in p:
+        itr += 1
+        y = y.item()
+        output = torch.softmax(model(x.unsqueeze(0).to(device))[0],1)
+        argmax = torch.argmax(output).item()
+        if argmax == y: correct += 1
+        p.set_description(f"Mag: {mag} Acc: {(correct/itr)*100:.1f}%")
+    return (correct/itr)*100
+
+# ======================================= Training Loop ===========================================  
+def train (model, name):
+    losses = [] # Loss array for graphing
+
+    max_not_one = 0.6
+    batch_size = 16
+    num_samples_per_itr = 8
+    min_length = 100
+    max_length = 300
+    lr = 0.01
+    itr = 3_000
+
+    criterion = nn.CrossEntropyLoss()
+    model = model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+
+    # Print number of total params
+    print(f"============================ Training {name} ============================")
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total Params: {total_params}")
+    
+    # Training Loop
+    start = time.time()
+    progress_bar = trange(itr)
+    itr = 0
+    
+    for _ in progress_bar:
+        dataset = DataLoader(
+            VectorArgmaxBenchmark(
+                width=randint(min_length, max_length),
+                height=batch_size*num_samples_per_itr,
+                max_not_one=max_not_one
+            ),
+            batch_size=batch_size,
+        )
+
+        # Train on that data
+        avg_loss = 0
+        for x, y in dataset:
+            opt.zero_grad()
+            out, i_upscale, i_upscale_bias = model(x) 
+            loss = criterion(out, y)
+            loss.backward()
+            opt.step()
+
+            progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale} b_ups: {i_upscale_bias}")
+
+            avg_loss += loss.item()
+        avg_loss /= len(dataset)
+        if avg_loss < 5: # For the sake of generating a clean loss data 
+            losses.append(avg_loss)
+
+    # End time
+    elapsed_time = time.time() - start
+    
+    # Save Model
+    saved_name = name.replace(" ", "_").lower()
+    dir_path = os.path.join(os.getcwd(), "models")
+    file_path = os.path.join(dir_path, f"{saved_name}.pt") 
+    if not os.path.isdir(dir_path): os.mkdir(dir_path)
+    torch.save(model, file_path)
+    print("Saved model")
+
+    # Test the model
+    print(f"============================ Validating {name} ============================")
+    acc = validation()
+
+    # Return Everything
+    return losses_one, {saved_name: { "Accuracy": acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params}}
+
+# ======================================= Main Loop =========================================== 
+if __name__ == "__main__":
+    trainers = {
+        "New VNN Model": NewVNNModel(),
+        "Original VNN Model": OrigVNNModel(),
+    }
+    
+    dir_path = os.path.join(os.getcwd(), "data")
+    if not os.path.isdir(dir_path): os.mkdir(dir_path)
+    overall_dict = {}
+    for name in trainers.keys():
+        losses_one, losses_two, losses_three, result = train(trainers[name], name)
+
+        plt.figure()
+        plt.plot(losses_one, label = f"{name} Mag 1")
+        plt.plot(losses_two, label = f"{name} Mag 2")
+        plt.plot(losses_three, label = f"{name} Mag 3")
+        overall_dict.update(result)
+
+        # Save loss data and json data
+        saved_name = name.replace(" ", "_").lower()
+        plt.legend()
+        plt.savefig(os.path.join(dir_path, f"loss_plot_{saved_name}.png"))
+
+    # Save overall dict
+    with open(os.path.join(dir_path, "data.json"), "w") as f:
+        json.dump(overall_dict, f) 
+    print("Saved data")
