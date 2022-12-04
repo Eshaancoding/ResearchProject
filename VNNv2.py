@@ -6,7 +6,7 @@ import sys; sys.path.append("../")
 from PosEnc import *
 
 class VNNBlockTwo (nn.Module):
-    def __init__(self, d_model, initial_size, kernel_size, pad_size, device) -> None:
+    def __init__(self, d_model, initial_size, kernel_size, device) -> None:
         super().__init__()
         self.initial_param = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
         self.initial_param_bias = nn.Parameter(torch.randn(1, 1, initial_size, initial_size, requires_grad=True))
@@ -25,7 +25,6 @@ class VNNBlockTwo (nn.Module):
             nn.Linear(12, (kernel_size*kernel_size+1)),
         )
 
-        self.pad_size = pad_size
         self.d_model = d_model
         self.kernel_size = kernel_size
         self.pos_enc = PosEncIndex(d_model, device=device)

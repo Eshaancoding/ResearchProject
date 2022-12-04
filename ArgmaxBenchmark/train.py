@@ -40,7 +40,7 @@ class VectorArgmaxBenchmark (Dataset):
 class NewVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.encoder = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, pad_size=3, device=device)
+        self.encoder = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, device=device)
         self.to(device)
 
     def forward (self, x): 
@@ -142,7 +142,7 @@ def train (model, name):
         if avg_loss < 5: # For the sake of generating a clean loss data 
             losses.append(avg_loss)
 
-    # End time
+   # End time
     elapsed_time = time.time() - start
     
     # Save Model

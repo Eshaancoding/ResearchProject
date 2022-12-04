@@ -113,7 +113,7 @@ class ConvolutionNN(nn.Module):
 class NewVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, pad_size=3, device=device)
+        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, device=device)
         self.conv2d = ConvolutionNN()
         self.to(device)
 
