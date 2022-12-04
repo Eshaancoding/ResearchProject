@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 
 # Get Device
 device = "cuda" if torch.cuda.is_available() else "cpu"
-device = "cpu"
 
 # ======================================= Vector Argmax Benchmark ===========================================  
 class VectorArgmaxBenchmark (Dataset):
@@ -41,7 +40,7 @@ class VectorArgmaxBenchmark (Dataset):
 class NewVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.encoder = VNNBlockTwo(d_model=64, initial_size=15, kernel_size=3, pad_size=3, device=device)
+        self.encoder = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, pad_size=3, device=device)
         self.to(device)
 
     def forward (self, x): 
@@ -98,8 +97,8 @@ def train (model, name):
     max_not_one = 0.6
     batch_size = 16
     num_samples_per_itr = 8
-    min_length = 200
-    max_length = 10
+    min_length = 100
+    max_length = 300
     lr = 0.01
     itr = 3_000
 

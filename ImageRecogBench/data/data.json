@@ -1,26 +1,10 @@
 {
     "new_vnn_model": {
-        "Magnitude 1 Accuracy": 20,
-        "Magnitude 2 Accuracy": 20,
-        "Magnitude 3 Accuracy": 20,
-        "Average Accuracy": 20,
-        "Training Time elapsed time (seconds)": 1.6168324947357178,
-        "Total Params:": 48946
-    },
-    "lstm_model": {
-        "Magnitude 1 Accuracy": 20,
-        "Magnitude 2 Accuracy": 20,
-        "Magnitude 3 Accuracy": 20,
-        "Average Accuracy": 20,
-        "Training Time elapsed time (seconds)": 13.778019905090332,
-        "Total Params:": 44390
-    },
-    "original_vnn_model": {
-        "Magnitude 1 Accuracy": 20,
-        "Magnitude 2 Accuracy": 20,
-        "Magnitude 3 Accuracy": 20,
-        "Average Accuracy": 20,
-        "Training Time elapsed time (seconds)": 2.507183074951172,
-        "Total Params:": 41782
+        "Magnitude 1 Accuracy": 95.58,
+        "Magnitude 2 Accuracy": 95.06,
+        "Magnitude 3 Accuracy": 93.7,
+        "Average Accuracy": 94.77999999999999,
+        "Training Time elapsed time (seconds)": 467.1335768699646,
+        "Total Params:": 41556
     }
 }

@@ -15,11 +15,13 @@ class VNNBlockTwo (nn.Module):
 
         self.weight_nn = nn.Sequential(
             nn.Linear(d_model+self.extra_flag_len, 12),
+            nn.Tanh(),
             nn.Linear(12, kernel_size*kernel_size+1),
         )
 
         self.bias_nn = nn.Sequential(
             nn.Linear(d_model+self.extra_flag_len, 12),
+            nn.Tanh(),
             nn.Linear(12, (kernel_size*kernel_size+1)),
         )
 
