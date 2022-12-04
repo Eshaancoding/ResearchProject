@@ -1,10 +1,10 @@
 {
-    "new_vnn_model": {
-        "Magnitude 1 Accuracy": 95.58,
-        "Magnitude 2 Accuracy": 95.06,
-        "Magnitude 3 Accuracy": 93.7,
-        "Average Accuracy": 94.77999999999999,
-        "Training Time elapsed time (seconds)": 467.1335768699646,
-        "Total Params:": 41556
+    "vnn_model_v3": {
+        "Magnitude 1 Accuracy": 95.22,
+        "Magnitude 2 Accuracy": 97.1,
+        "Magnitude 3 Accuracy": 96.53,
+        "Average Accuracy": 96.28333333333335,
+        "Training Time elapsed time (seconds)": 449.261691570282,
+        "Total Params:": 69808
     }
 }

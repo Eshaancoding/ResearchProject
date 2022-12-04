@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 from tqdm import trange, tqdm
 import sys; sys.path.append("..\\")
+from VNNv3 import *
 from VNNv2 import *
 from VNN import *
 import time
@@ -109,22 +110,8 @@ class ConvolutionNN(nn.Module):
         x = self.conv3(x)
         return x
 
-# ======================================= New VNN Model ===========================================  
-class NewVNNModel (nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, device=device)
-        self.conv2d = ConvolutionNN()
-        self.to(device)
-
-    def forward (self, x): 
-        x = self.conv2d(x)
-        x = x.view(x.size(0), -1)
-        x, i_upscale, i_upscale_bias = self.vnnBlock(x, 10, debug=True) 
-        return x, i_upscale, i_upscale_bias
-
-# ======================================= Original VNN Model ===========================================  
-class OrigVNNModel (nn.Module):
+# ======================================= VNN V1 ===========================================  
+class VNNModelV1 (nn.Module):
     def __init__(self) -> None:
         super().__init__()
         d_model = 64
@@ -150,25 +137,33 @@ class OrigVNNModel (nn.Module):
         x = self.vnnBlock(x, 10) 
         return x, -1, -1
 
-# ======================================= LSTM Model ===========================================  
-class LSTMModel (nn.Module):
+# ======================================= VNN Model V2 ===========================================  
+class VNNModelV2 (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        d_model = 25
-        self.in_nn = nn.Linear(1, d_model)
-        self.out_nn = nn.Linear(d_model, 10)
-        self.lstm_model = nn.LSTM(input_size=d_model, hidden_size=d_model)
-        
+        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, device=device)
         self.conv2d = ConvolutionNN()
         self.to(device)
 
     def forward (self, x): 
         x = self.conv2d(x)
-        x = x.view(-1, x.size(0), 1)
-        x = self.in_nn(x)
-        x = self.lstm_model(x)[0][-1]
-        x = self.out_nn(x)
-        return x, -1, -1
+        x = x.view(x.size(0), -1)
+        x, i_upscale, i_upscale_bias = self.vnnBlock(x, 10, debug=True) 
+        return x, i_upscale, i_upscale_bias
+
+# ======================================= VNN Model V3 ===========================================  
+class VNNModelV3 (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.vnnBlock = VNNv3(d_model=64, input_kernel_size=200, output_kernel_size=10, device=device)
+        self.conv2d = ConvolutionNN()
+        self.to(device)
+
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(x.size(0), -1)
+        x, gen_x, gen_y = self.vnnBlock(x, 10, True) 
+        return x, gen_y, gen_x
 
 # ======================================= Validation Loop ===========================================  
 def validation (mag, model):
@@ -267,9 +262,7 @@ def train (model, name):
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
-        "New VNN Model": NewVNNModel(), 
-        # "LSTM Model":LSTMModel(),
-        # "Original VNN Model": OrigVNNModel()
+        "VNN Model v3": VNNModelV3()
     }
     
     dir_path = os.path.join(os.getcwd(), "data")
