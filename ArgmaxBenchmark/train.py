@@ -1,119 +1,54 @@
-# Import libraries
 from random import randint
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import trange, tqdm
-import sys; sys.path.append("..\\")
-from VNNTwo import *
+import sys; sys.path.append("../") 
 from VNN import *
+from VNNv2 import *
 import time
 import os
 import json
 import matplotlib.pyplot as plt
 
+
 # Get Device
 device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 
-# ======================================= MNIST dataset ===========================================  
-mnist_dataset = MNIST(root="./datasets/", download=True)
-mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
-
-class AddGaussianNoise(object):
-    def __init__(self, std=1.):
-        self.std = std
-        print(self.std)
-        
-    def __call__(self, tensor):
-        return torch.clamp(tensor + (torch.rand_like(tensor) * self.std), 0, 1)
-    
-    def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(0, self.std)
-
-class MNISTDatasetSize (Dataset):
-    def __init__(self, size=512, mag=1, std_noise=0.25, use_test=False) -> None:
+# ======================================= Vector Argmax Benchmark ===========================================  
+class VectorArgmaxBenchmark (Dataset):
+    def __init__(self, width, height, max_not_one) -> None:
         super().__init__()
+        self.len = height
 
-        self.mag = mag
-        self.size = size
-        self.std_noise = std_noise
-
-        if use_test:
-            left = len(mnist_test_dataset) - size
-            self.dataset, _ = random_split(mnist_test_dataset, (size, left))
-        else:
-            left = len(mnist_dataset) - size
-            self.dataset, _ = random_split(mnist_dataset, (size, left))
+        # Generate dataset
+        self.x = torch.rand(height, width).to(device)*max_not_one
+        exp_out = []
+        for i in range(height):
+            rand_num = randint(0, width-1)
+            self.x[i][rand_num] = 1
+            exp_out.append(rand_num)
+        self.exp_out = torch.tensor(exp_out).to(device)
 
     def __len__ (self):
-        return self.size
+        return self.len 
 
     def __getitem__(self, index):
-        image, _ = self.dataset[index]
+        return self.x[index], self.exp_out[index]
         
-        # Use transformations
-        transformY = transforms.Compose([
-            transforms.PILToTensor(),
-        ]) 
-        transformX = transforms.Compose([
-            transforms.PILToTensor(),
-            AddGaussianNoise(self.std_noise)
-        ]) 
-
-        if self.mag == 2:
-            transformY = transforms.Compose([
-                transforms.Resize((35, 35)),
-                transforms.ToTensor(),
-            ])
-            transformX = transforms.Compose([
-                transforms.Resize((35, 35)),
-                transforms.ToTensor(),
-                AddGaussianNoise(self.std_noise)
-            ])
-        elif self.mag == 3:
-            transformY = transforms.Compose([
-                transforms.Resize((45, 45)),
-                transforms.ToTensor(),
-            ])
-            transformX = transforms.Compose([
-                transforms.Resize((45, 45)),
-                transforms.ToTensor(),
-                AddGaussianNoise(self.std_noise)
-            ])
-
-        x = transformX(image).to(torch.float).to(device)
-        y = transformY(image).to(torch.float).to(device)
-        
-        # Print image        
-        # print(x.squeeze(0).numpy().shape)
-        # x_img = PIL.Image.fromarray(np.uint8(x.squeeze(0).numpy()*255))
-        # x_img = x_img.resize((500, 500), PIL.Image.NEAREST)
-        # x_img.show() 
-        # y_img = PIL.Image.fromarray(np.uint8(y.squeeze(0).numpy()*255))
-        # y_img = y_img.resize((500, 500), PIL.Image.NEAREST)
-        # y_img.show()
-        # exit(0)
-
-        return x, y
 # ======================================= New VNN Model ===========================================  
 class NewVNNModel (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.inner = 30
-        self.encoder = VNNBlockTwo(d_model=16, initial_size=10, kernel_size=8, device=device)
-        self.decoder = VNNBlockTwo(d_model=16, initial_size=10, kernel_size=8, device=device)
-        self.nn_mid = nn.Linear(self.inner, self.inner) 
-        self.sigmoid = nn.Sigmoid()
+        self.encoder = VNNBlockTwo(d_model=64, initial_size=15, kernel_size=3, pad_size=3, device=device)
         self.to(device)
 
     def forward (self, x): 
         x = x.view(x.size(0), -1)
         length = x.size(1)
-        x = self.sigmoid(self.encoder(x, self.inner))
-        x = self.sigmoid(self.nn_mid(x))
-        x, i_upscale, i_upscale_bias = self.decoder(x, length, debug=True) 
+        x, i_upscale, i_upscale_bias = self.encoder(x, length, debug=True)
         return x, i_upscale, i_upscale_bias
-
 
 # ======================================= Original VNN Model ===========================================  
 class OrigVNNModel (nn.Module):
@@ -138,26 +73,7 @@ class OrigVNNModel (nn.Module):
     def forward (self, x): 
         x = x.view(x.size(0), -1)
         length = x.size(1)
-        x = self.vnnBlock(x, length) 
-        return x, -1, -1
-
-# ======================================= Transformers Model ===========================================  
-class TransformersModel (nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        d_model = 25
-        self.in_nn = nn.Linear(1, d_model)
-        self.out_nn = nn.Linear(d_model, 10)
-        self.lstm_model = nn.LSTM(input_size=d_model, hidden_size=d_model)
-        
-        self.to(device)
-
-    def forward (self, x): 
-        x = self.conv2d(x)
-        x = x.view(-1, x.size(0), 1)
-        x = self.in_nn(x)
-        x = self.lstm_model(x)[0][-1]
-        x = self.out_nn(x)
+        x = self.vnnBlock(x, length)
         return x, -1, -1
 
 # ======================================= Validation Loop ===========================================  
@@ -182,8 +98,8 @@ def train (model, name):
     max_not_one = 0.6
     batch_size = 16
     num_samples_per_itr = 8
-    min_length = 100
-    max_length = 300
+    min_length = 200
+    max_length = 10
     lr = 0.01
     itr = 3_000
 
@@ -248,8 +164,9 @@ def train (model, name):
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
+        # "VNN Model v3": VNNBlockThree(),
         "New VNN Model": NewVNNModel(),
-        "Original VNN Model": OrigVNNModel(),
+        # "Original VNN Model": OrigVNNModel(),
     }
     
     dir_path = os.path.join(os.getcwd(), "data")

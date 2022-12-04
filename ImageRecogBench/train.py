@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 from tqdm import trange, tqdm
 import sys; sys.path.append("..\\")
-from VNNTwo import *
+from VNNv2 import *
 from VNN import *
 import time
 import os
