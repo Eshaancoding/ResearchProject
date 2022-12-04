@@ -83,7 +83,7 @@ class VNNV2Model (nn.Module):
 class VNNV3Model (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNv3(d_model=64, input_kernel_size=1, output_kernel_size=1, device=device)
+        self.vnnBlock = VNNv3(d_model=64, input_kernel_size=50, output_kernel_size=50, hidden_size=25, device=device)
         self.to(device)
 
     def forward (self, x): 
@@ -91,7 +91,7 @@ class VNNV3Model (nn.Module):
         length = x.size(1)
 
         x, gen_x, gen_y = self.vnnBlock(x, length, True)
-        return torch.sigmoid(x), gen_y, gen_x
+        return x, gen_y, gen_x
 
 # ======================================= Validation Loop ===========================================  
 def validation (mag, model):
@@ -137,7 +137,7 @@ def train (model, name):
     for _ in progress_bar:
         dataset = DataLoader(
             VectorArgmaxBenchmark(
-                width=randint(min_length, max_length),
+                width=100,
                 height=batch_size*num_samples_per_itr,
                 max_not_one=max_not_one
             ),
@@ -155,7 +155,6 @@ def train (model, name):
 
             # calculate accuracy
             acc = (torch.sum(torch.argmax(out, dim=1) == y)/y.size(0)).item()
-
             progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale} b_ups: {i_upscale_bias} val acc: {(acc*100):.1f}%")
 
             avg_loss += loss.item()
@@ -185,9 +184,9 @@ def train (model, name):
 if __name__ == "__main__":
     # NOTE: Changed loss, so you might need to change activation function
     trainers = {
-        "VNN Model v1": VNNV1Model(),
+        # "VNN Model v1": VNNV1Model(),
         # "VNN Model v2": VNNV2Model(),
-        # "VNN Model v3": VNNV3Model(),
+        "VNN Model v3": VNNV3Model(),
     }
     
     dir_path = os.path.join(os.getcwd(), "data")

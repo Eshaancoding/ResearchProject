@@ -7,18 +7,14 @@ from PosEnc import *
 
 
 class VNNBlock (nn.Module):
-    def __init__(self, d_model, weight_nn, bias_nn, device=None) -> None:
+    def __init__(self, d_model, weight_nn, bias_nn, device) -> None:
         super().__init__()
         self.weight_nn = weight_nn 
         self.bias_nn = bias_nn 
 
-        self.pos_enc = PosEncIndex(d_model, device=("cpu" if device == None  else device))
-        
-        if device != None:
-            self.device = device
-            self.to(device)
-        else: 
-            self.device = "cpu"
+        self.pos_enc = PosEncIndex(d_model, device=device)
+        self.device = device
+        self.to(device)
 
     def weight_propagation (self, x, output_size, extra_out):
         input_size = x.size(1)
