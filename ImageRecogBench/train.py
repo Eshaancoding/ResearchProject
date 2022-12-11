@@ -6,10 +6,10 @@ from torch.utils.data import random_split, DataLoader, Dataset
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 from tqdm import trange, tqdm
-import sys; sys.path.append("..\\")
-from VNNv3 import *
-from VNNv2 import *
-from VNN import *
+import sys; sys.path.append("../")
+from NN.VNNv3 import *
+from NN.VNNv2 import *
+from NN.VNN import *
 import time
 import os
 import json
