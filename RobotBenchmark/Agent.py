@@ -7,7 +7,6 @@ from NN.VNNv2 import *
 from NN.VNNv3 import *
 
 
-#********** TODO IMPLEMENT STD!! ***************
 class Policy (nn.Module):
     def __init__(self, VNN_v, device) -> None:
         super().__init__()

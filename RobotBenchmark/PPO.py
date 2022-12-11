@@ -115,5 +115,4 @@ class Trainer:
         
     def train (self):
         # Don't forget to negate (-) the surrogate loss objective since we want to maximize this
-        # Implement mean std
         return None
