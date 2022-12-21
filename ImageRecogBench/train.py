@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.utils.data import random_split, DataLoader, Dataset
 import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
+from torchvision.datasets import CIFAR10
 from tqdm import trange, tqdm
 import sys; sys.path.append("../")
 from NN.VNNv3 import *
@@ -19,9 +19,9 @@ import matplotlib.pyplot as plt
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ======================================= Image Recognition Benchmark ===========================================  
-mnist_dataset = MNIST(root="./datasets/", download=True)
-mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
-class MNISTDatasetSize (Dataset):
+mnist_dataset = CIFAR10(root="./datasets/", download=True)
+mnist_test_dataset = CIFAR10(root="./datasets/", train=False, download=True)
+class ImageDataset (Dataset):
     def __init__(self, size=512, mag=1, use_test=False) -> None:
         super().__init__()
 
@@ -54,12 +54,12 @@ class MNISTDatasetSize (Dataset):
 
         if self.mag == 2:
             transform = transforms.Compose([
-                transforms.Resize((35, 35)),
+                transforms.Resize((45, 45)),
                 transforms.ToTensor(),
             ])
         elif self.mag == 3:
             transform = transforms.Compose([
-                transforms.Resize((45, 45)),
+                transforms.Resize((75, 75)),
                 transforms.ToTensor(),
             ])
 
@@ -73,7 +73,7 @@ class ConvolutionNN(nn.Module):
         super(ConvolutionNN, self).__init__()
         self.conv1 = nn.Sequential(         
             nn.Conv2d(
-                in_channels=1,              
+                in_channels=3,              
                 out_channels=16,            
                 kernel_size=5,              
                 stride=1,                   
@@ -167,7 +167,7 @@ class VNNModelV3 (nn.Module):
 
 # ======================================= Validation Loop ===========================================  
 def validation (mag, model):
-    dataset = MNISTDatasetSize(size="full", mag=mag, use_test=True)
+    dataset = ImageDataset(size="full", mag=mag, use_test=True)
     correct = 0
     itr = 0
     p = tqdm(dataset, total=10000)
@@ -211,7 +211,7 @@ def train (model, name):
         mag = randint(1,3)
 
         dataset = DataLoader(
-            MNISTDatasetSize(
+            ImageDataset(
                 size=batch_size*num_samples_per_itr,
                 mag=mag, 
                 use_test=False
