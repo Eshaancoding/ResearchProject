@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.utils.data import random_split, DataLoader, Dataset
 import torchvision.transforms as transforms
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, MNIST
 from tqdm import trange, tqdm
 import sys; sys.path.append("../")
 from NN.VNNv3 import *
@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ======================================= Image Recognition Benchmark ===========================================  
-mnist_dataset = CIFAR10(root="./datasets/", download=True)
-mnist_test_dataset = CIFAR10(root="./datasets/", train=False, download=True)
+mnist_dataset = MNIST(root="./datasets/", download=True)
+mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
 class ImageDataset (Dataset):
     def __init__(self, size=512, mag=1, use_test=False) -> None:
         super().__init__()
@@ -54,12 +54,12 @@ class ImageDataset (Dataset):
 
         if self.mag == 2:
             transform = transforms.Compose([
-                transforms.Resize((45, 45)),
+                transforms.Resize((35, 35)),
                 transforms.ToTensor(),
             ])
         elif self.mag == 3:
             transform = transforms.Compose([
-                transforms.Resize((75, 75)),
+                transforms.Resize((65, 65)),
                 transforms.ToTensor(),
             ])
 
@@ -73,7 +73,7 @@ class ConvolutionNN(nn.Module):
         super(ConvolutionNN, self).__init__()
         self.conv1 = nn.Sequential(         
             nn.Conv2d(
-                in_channels=3,              
+                in_channels=1,              
                 out_channels=16,            
                 kernel_size=5,              
                 stride=1,                   
@@ -110,33 +110,6 @@ class ConvolutionNN(nn.Module):
         x = self.conv3(x)
         return x
 
-# ======================================= VNN V1 ===========================================  
-class VNNModelV1 (nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        d_model = 64
-        weight_model = nn.Sequential(
-            nn.Linear(d_model*2+1, 16),
-            nn.Tanh(),
-            nn.Linear(16, 1),
-        ) 
-
-        bias_model = nn.Sequential( 
-            nn.Linear(d_model+1, 12),
-            nn.Tanh(),
-            nn.Linear(12, 1),
-        )
-
-        self.vnnBlock = VNNBlock(d_model, weight_model, bias_model, device=device)
-        self.conv2d = ConvolutionNN()
-        self.to(device)
-
-    def forward (self, x): 
-        x = self.conv2d(x)
-        x = x.view(x.size(0), -1)
-        x = self.vnnBlock(x, 10) 
-        return x, -1, -1
-
 # ======================================= VNN Model V2 ===========================================  
 class VNNModelV2 (nn.Module):
     def __init__(self) -> None:
@@ -166,7 +139,7 @@ class VNNModelV3 (nn.Module):
         return x, gen_y, gen_x
 
 # ======================================= Validation Loop ===========================================  
-def validation (mag, model):
+def validation (mag, model, confusionMatrix):
     dataset = ImageDataset(size="full", mag=mag, use_test=True)
     correct = 0
     itr = 0
@@ -177,8 +150,10 @@ def validation (mag, model):
         output = torch.softmax(model(x.unsqueeze(0).to(device))[0],1)
         argmax = torch.argmax(output).item()
         if argmax == y: correct += 1
+        confusionMatrix[y][argmax] += 1
         p.set_description(f"Mag: {mag} Acc: {(correct/itr)*100:.1f}%")
-    return (correct/itr)*100
+
+    return (correct/itr)*100, confusionMatrix
 
 # ======================================= Training Loop ===========================================  
 def train (model, name):
@@ -233,7 +208,7 @@ def train (model, name):
 
             avg_loss += loss.item()
         avg_loss /= len(dataset)
-        if avg_loss < 5: # For the sake of actually generating a clean loss data 
+        if avg_loss < 5: # For the sake of actually generating a clean loss data, sometimes random spikes occur (esp during beginning of training)
             if mag == 1: losses_one.append(avg_loss)
             if mag == 2: losses_two.append(avg_loss)
             if mag == 3: losses_three.append(avg_loss)
@@ -251,17 +226,24 @@ def train (model, name):
 
     # Test the model
     print(f"============================ Validating {name} ============================")
-    acc_1 = validation(mag=1, model=model)
-    acc_2 = validation(mag=2, model=model)
-    acc_3 = validation(mag=3, model=model)
+    confusionMatrix = torch.zeros((10, 10))
+    acc_1, confusionMatrix = validation(mag=1, model=model, confusionMatrix=confusionMatrix)
+    acc_2, confusionMatrix = validation(mag=2, model=model, confusionMatrix=confusionMatrix)
+    acc_3, confusionMatrix = validation(mag=3, model=model, confusionMatrix=confusionMatrix)
     avg_acc = (acc_1 + acc_2 + acc_3) / 3
+    
+    # Print Confusion matrix
+    print("======== Confusion Matrix: ======== ")
+    print(confusionMatrix)
+    print("=================================== ")
 
     # Return Everything
-    return losses_one, losses_two, losses_three, {saved_name: { "Magnitude 1 Accuracy": acc_1, "Magnitude 2 Accuracy": acc_2, "Magnitude 3 Accuracy": acc_3, "Average Accuracy": avg_acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params}}
+    return losses_one, losses_two, losses_three, {saved_name: { "Magnitude 1 Accuracy": acc_1, "Magnitude 2 Accuracy": acc_2, "Magnitude 3 Accuracy": acc_3, "Average Accuracy": avg_acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params, "Confusion Matrix": str(confusionMatrix.tolist())}}
 
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
+        "VNN Model v2": VNNModelV2(),
         "VNN Model v3": VNNModelV3()
     }
     
