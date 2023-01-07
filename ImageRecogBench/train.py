@@ -130,7 +130,7 @@ class VNNModelV2 (nn.Module):
 class VNNModelV3 (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNv3(d_model=64, input_kernel_size=200, output_kernel_size=10, hidden_size=64, device=device)
+        self.vnnBlock = VNNv3(d_model=64, input_kernel_size=100, output_kernel_size=10, hidden_size=32, device=device)
         self.conv2d = ConvolutionNN()
         self.to(device)
 
@@ -268,8 +268,8 @@ def train (model, name, mag_test_arr):
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
-        "LSTM Model": LSTMModel(),
-        "VNN Model v2": VNNModelV2(),
+        # "LSTM Model": LSTMModel(),
+        # "VNN Model v2": VNNModelV2(),
         "VNN Model v3": VNNModelV3()
     }
 
@@ -287,6 +287,9 @@ if __name__ == "__main__":
 
         # Save loss data and json data
         saved_name = name.replace(" ", "_").lower()
+        plt.xlabel("Training Iterations")
+        plt.xlabel("Cross Entropy Loss")
+        plt.title(f"Loss graph of {name}")
         plt.legend()
         plt.savefig(os.path.join(dir_path, f"loss_plot_{saved_name}.png"))
 

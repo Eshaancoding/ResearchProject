@@ -184,9 +184,8 @@ def train (model, name):
 if __name__ == "__main__":
     # NOTE: Changed loss, so you might need to change activation function
     trainers = {
-        # "VNN Model v1": VNNV1Model(),
         # "VNN Model v2": VNNV2Model(),
-        "VNN Model v3": VNNV3Model(),
+        # "VNN Model v3": VNNV3Model(),
     }
     
     dir_path = os.path.join(os.getcwd(), "data")
