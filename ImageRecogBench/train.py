@@ -116,7 +116,7 @@ class ConvolutionNN(nn.Module):
 class VNNModelV2 (nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=10, kernel_size=5, device=device)
+        self.vnnBlock = VNNBlockTwo(d_model=64, initial_size=20, kernel_size=15, inner_size=64, device=device)
         self.conv2d = ConvolutionNN()
         self.to(device)
 
@@ -140,13 +140,38 @@ class VNNModelV3 (nn.Module):
         x, gen_x, gen_y = self.vnnBlock(x, 10, True) 
         return x, gen_y, gen_x
 
+
+# ======================================= LSTM Model ===========================================  
+class LSTMModel (nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.input_size = 30
+        self.d_model = 64
+        self.in_nn = nn.Linear(self.input_size, self.d_model)
+        self.out_nn = nn.Linear(self.d_model, 10)
+        self.lstm_model = nn.LSTM(input_size=self.d_model, hidden_size=self.d_model, batch_first=True)
+        
+        self.conv2d = ConvolutionNN()
+        self.to(device)
+
+    def forward (self, x): 
+        x = self.conv2d(x)
+        x = x.view(x.size(0), -1)
+        extra = math.ceil(x.size(1) / self.input_size) * self.input_size - x.size(1)
+        x = torch.concat((x, torch.zeros(x.size(0), extra).to(device)), dim=1)
+        x = x.view(x.size(0), -1, self.input_size)
+        x = self.in_nn(x)
+        x = self.lstm_model(x)[1][0][0]
+        x = self.out_nn(x)
+        return x, -1, -1
+
 # ======================================= Validation Loop ===========================================  
-def validation (model, min_res, max_res):
+def validation (model, mag_test_arr):
     confusionMatrix = torch.zeros(10, 10)
     correct = 0
     p = trange(10_000)
     for i in p:
-        res = randint(min_res, max_res) 
+        res = mag_test_arr[i] 
         x, y = ImageDataset.getTestImageRandSize(i, res)
 
         y = y.item()
@@ -159,7 +184,7 @@ def validation (model, min_res, max_res):
     return (correct/100), confusionMatrix
 
 # ======================================= Training Loop ===========================================  
-def train (model, name):
+def train (model, name, mag_test_arr):
     losses = [] # Loss array for graphing
 
     batch_size = 16
@@ -181,7 +206,8 @@ def train (model, name):
     # Training Loop
     start = time.time()
     progress_bar = trange(itr)
-    itr = 0
+    itr = 1
+    avg_loss = 0
     
     for _ in progress_bar:
         # Get data
@@ -198,7 +224,6 @@ def train (model, name):
         )
 
         # Train on that data
-        avg_loss = 0
         for x, y in dataset:
             opt.zero_grad()
             out, i_upscale, i_upscale_bias = model(x) 
@@ -209,8 +234,13 @@ def train (model, name):
             progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale:2d} b_ups: {i_upscale_bias:2d} res: {res:3d}")
 
             avg_loss += loss.item()
-        avg_loss /= len(dataset)
-        losses.append(avg_loss) 
+        
+        if itr == 3: 
+            avg_loss /= len(dataset) * 3
+            losses.append(avg_loss) 
+            itr = 0
+            avg_loss = 0
+        itr += 1
 
     # End time
     elapsed_time = time.time() - start
@@ -225,7 +255,7 @@ def train (model, name):
 
     # Test the model
     print(f"============================ Validating {name} ============================")
-    acc, confusionMatrix = validation(model=model, min_res=min_res, max_res=max_res)
+    acc, confusionMatrix = validation(model=model, mag_test_arr=mag_test_arr)
     
     # Print Confusion matrix
     print("======== Confusion Matrix: ======== ")
@@ -238,15 +268,18 @@ def train (model, name):
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
-        "VNN Model v3": VNNModelV3(),
-        "VNN Model v2": VNNModelV2()
+        "LSTM Model": LSTMModel(),
+        "VNN Model v2": VNNModelV2(),
+        "VNN Model v3": VNNModelV3()
     }
+
+    mag_test_arr = torch.randint(28, 128, (10_000,)).tolist()
     
     dir_path = os.path.join(os.getcwd(), "data")
     if not os.path.isdir(dir_path): os.mkdir(dir_path)
     overall_dict = {}
     for name in trainers.keys():
-        losses, result = train(trainers[name], name)
+        losses, result = train(trainers[name], name, mag_test_arr)
 
         plt.figure()
         plt.plot(losses, label = name)
