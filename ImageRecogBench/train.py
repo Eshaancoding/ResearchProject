@@ -288,7 +288,7 @@ if __name__ == "__main__":
         # Save loss data and json data
         saved_name = name.replace(" ", "_").lower()
         plt.xlabel("Training Iterations")
-        plt.xlabel("Cross Entropy Loss")
+        plt.ylabel("Cross Entropy Loss")
         plt.title(f"Loss graph of {name}")
         plt.legend()
         plt.savefig(os.path.join(dir_path, f"loss_plot_{saved_name}.png"))
