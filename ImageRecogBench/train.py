@@ -268,8 +268,8 @@ def train (model, name, mag_test_arr):
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
-        "LSTM Model": LSTMModel()
-        # "VNN Model v2": VNNModelV2(),
+        # "LSTM Model": LSTMModel()
+        "VNN Model v2": VNNModelV2(),
         # "VNN Model v3": VNNModelV3()
     }
 
