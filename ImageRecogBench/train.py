@@ -22,10 +22,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 mnist_dataset = MNIST(root="./datasets/", download=True)
 mnist_test_dataset = MNIST(root="./datasets/", train=False, download=True)
 class ImageDataset (Dataset):
-    def __init__(self, size=512, mag=1, use_test=False) -> None:
+    def __init__(self, res, size=512, use_test=False) -> None:
         super().__init__()
 
-        self.mag = mag
+        self.res = res
         self.size = size
 
         if use_test:
@@ -47,21 +47,23 @@ class ImageDataset (Dataset):
     def __getitem__(self, index):
         x, y = self.dataset[index]
         
-        # Use transformations
         transform = transforms.Compose([
-            transforms.PILToTensor(),
-        ]) 
+            transforms.Resize((self.res, self.res)),
+            transforms.ToTensor(),
+        ])
 
-        if self.mag == 2:
-            transform = transforms.Compose([
-                transforms.Resize((35, 35)),
-                transforms.ToTensor(),
-            ])
-        elif self.mag == 3:
-            transform = transforms.Compose([
-                transforms.Resize((65, 65)),
-                transforms.ToTensor(),
-            ])
+        x = transform(x).to(torch.float).to(device)
+        y = torch.tensor(y).to(torch.long).to(device)
+        return x, y
+
+    @staticmethod
+    def getTestImageRandSize (i: int, res:int):
+        x, y = mnist_test_dataset[i]
+
+        transform = transforms.Compose([
+            transforms.Resize((res, res)),
+            transforms.ToTensor(),
+        ])
 
         x = transform(x).to(torch.float).to(device)
         y = torch.tensor(y).to(torch.long).to(device)
@@ -139,30 +141,31 @@ class VNNModelV3 (nn.Module):
         return x, gen_y, gen_x
 
 # ======================================= Validation Loop ===========================================  
-def validation (mag, model, confusionMatrix):
-    dataset = ImageDataset(size="full", mag=mag, use_test=True)
+def validation (model, min_res, max_res):
+    confusionMatrix = torch.zeros(10, 10)
     correct = 0
-    itr = 0
-    p = tqdm(dataset, total=10000)
-    for x, y in p:
-        itr += 1
+    p = trange(10_000)
+    for i in p:
+        res = randint(min_res, max_res) 
+        x, y = ImageDataset.getTestImageRandSize(i, res)
+
         y = y.item()
         output = torch.softmax(model(x.unsqueeze(0).to(device))[0],1)
         argmax = torch.argmax(output).item()
         if argmax == y: correct += 1
         confusionMatrix[y][argmax] += 1
-        p.set_description(f"Mag: {mag} Acc: {(correct/itr)*100:.1f}%")
+        p.set_description(f"Res: {res:3d} Acc: {(correct/(i+1))*100:.1f}%")
 
-    return (correct/itr)*100, confusionMatrix
+    return (correct/100), confusionMatrix
 
 # ======================================= Training Loop ===========================================  
 def train (model, name):
-    losses_one = [] # Loss array for graphing
-    losses_two = [] # Loss array for graphing
-    losses_three = [] # Loss array for graphing
+    losses = [] # Loss array for graphing
 
     batch_size = 16
     num_samples_per_itr = 4
+    min_res = 28
+    max_res = 128
     lr = 0.001
     itr = 3_000
 
@@ -179,16 +182,15 @@ def train (model, name):
     start = time.time()
     progress_bar = trange(itr)
     itr = 0
-    mag = 1
     
     for _ in progress_bar:
         # Get data
-        mag = randint(1,3)
+        res = randint(min_res, max_res)
 
         dataset = DataLoader(
             ImageDataset(
+                res=res,
                 size=batch_size*num_samples_per_itr,
-                mag=mag, 
                 use_test=False
             ),
             batch_size=batch_size,
@@ -204,14 +206,11 @@ def train (model, name):
             loss.backward()
             opt.step()
 
-            progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale} b_ups: {i_upscale_bias} mag: {mag}")
+            progress_bar.set_description(f"loss: {loss.item():.4f} w_ups: {i_upscale:2d} b_ups: {i_upscale_bias:2d} res: {res:3d}")
 
             avg_loss += loss.item()
         avg_loss /= len(dataset)
-        if avg_loss < 5: # For the sake of actually generating a clean loss data, sometimes random spikes occur (esp during beginning of training)
-            if mag == 1: losses_one.append(avg_loss)
-            if mag == 2: losses_two.append(avg_loss)
-            if mag == 3: losses_three.append(avg_loss)
+        losses.append(avg_loss) 
 
     # End time
     elapsed_time = time.time() - start
@@ -226,11 +225,7 @@ def train (model, name):
 
     # Test the model
     print(f"============================ Validating {name} ============================")
-    confusionMatrix = torch.zeros((10, 10))
-    acc_1, confusionMatrix = validation(mag=1, model=model, confusionMatrix=confusionMatrix)
-    acc_2, confusionMatrix = validation(mag=2, model=model, confusionMatrix=confusionMatrix)
-    acc_3, confusionMatrix = validation(mag=3, model=model, confusionMatrix=confusionMatrix)
-    avg_acc = (acc_1 + acc_2 + acc_3) / 3
+    acc, confusionMatrix = validation(model=model, min_res=min_res, max_res=max_res)
     
     # Print Confusion matrix
     print("======== Confusion Matrix: ======== ")
@@ -238,25 +233,23 @@ def train (model, name):
     print("=================================== ")
 
     # Return Everything
-    return losses_one, losses_two, losses_three, {saved_name: { "Magnitude 1 Accuracy": acc_1, "Magnitude 2 Accuracy": acc_2, "Magnitude 3 Accuracy": acc_3, "Average Accuracy": avg_acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params, "Confusion Matrix": str(confusionMatrix.tolist())}}
+    return losses, {saved_name: { "Accuracy": acc, "Training Time elapsed time (seconds)": elapsed_time, "Total Params:" : total_params, "Confusion Matrix": str(confusionMatrix.tolist())}}
 
 # ======================================= Main Loop =========================================== 
 if __name__ == "__main__":
     trainers = {
-        "VNN Model v2": VNNModelV2(),
-        "VNN Model v3": VNNModelV3()
+        "VNN Model v3": VNNModelV3(),
+        "VNN Model v2": VNNModelV2()
     }
     
     dir_path = os.path.join(os.getcwd(), "data")
     if not os.path.isdir(dir_path): os.mkdir(dir_path)
     overall_dict = {}
     for name in trainers.keys():
-        losses_one, losses_two, losses_three, result = train(trainers[name], name)
+        losses, result = train(trainers[name], name)
 
         plt.figure()
-        plt.plot(losses_one, label = f"{name} Mag 1")
-        plt.plot(losses_two, label = f"{name} Mag 2")
-        plt.plot(losses_three, label = f"{name} Mag 3")
+        plt.plot(losses, label = name)
         overall_dict.update(result)
 
         # Save loss data and json data
